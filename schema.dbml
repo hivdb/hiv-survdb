@@ -1,3 +1,5 @@
+// https://dbdiagram.io/d/62ccd828cc1bc14cc59b2c95
+
 Table articles as Ref {
   ref_name varchar [
     pk,
@@ -245,6 +247,33 @@ Table article_isolates as RefIso {
 
 Table article_summaries as RefSum {
   ref_name varchar [pk, ref: > Ref.ref_name]
+
+  num_patients int [not null, note: 'Number of patients filtered by RefNote.action']
+  num_isolates int [not null, note: 'Number of isolates']
+
+  Note: 'Derived article summary table'
+}
+
+
+Table datasets as D {
+  ref_name varchar [ref: > Ref.ref_name]
+  continent_name continent_enum
+
+  latitude float [not null, note: 'Manually maintained latitude of the dataset']
+  longitude float [not null, note: 'Manually maintained longitude of the dataset']
+
+  indexes {
+    (ref_name, continent_name) [pk]
+    continent_name
+  }
+
+  Note: 'Derived dataset (defined as article + contient) table'
+}
+
+Table dataset_summaries as DSum {
+  ref_name varchar
+  continent_name continent_enum
+
   isolate_year_begin int [not null, note: 'Isolate year range begin']
   isolate_year_end int [not null, note: 'Isolate year range end']
   isolate_sources varchar [not null, note: 'comma separated distinct isolate sources']
@@ -258,25 +287,37 @@ Table article_summaries as RefSum {
   pcnt_sdrm_isolates float [not null, note: 'Percent of isolates with SDRMs']
   pcnt_sdrm_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
 
-  Note: 'Derived article summary table'
+  indexes {
+    (ref_name, continent_name) [pk]
+    continent_name
+  }
+
+  Note: 'Derived dataset (article + contient) summary table'
 }
 
-Table article_gene_summaries as RefGeneSum {
-  ref_name varchar [ref: > Ref.ref_name]
+Ref: DSum.(ref_name, continent_name) > D.(ref_name, continent_name)
+
+Table dataset_gene_summaries as DGeneSum {
+  ref_name varchar
+  continent_name continent_enum
   gene gene_enum [note: 'Gene']
 
   num_isolates int [not null, note: 'Number of isolates']
   num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
 
   indexes {
-    (ref_name, gene) [pk]
+    (ref_name, continent_name, gene) [pk]
+    continent_name
   }
 
-  Note: 'Derived article summary by gene table'
+  Note: 'Derived dataset summary by gene table'
 }
 
-Table article_drug_class_summaries as RefDCSum {
-  ref_name varchar [ref: > Ref.ref_name]
+Ref: DGeneSum.(ref_name, continent_name) > D.(ref_name, continent_name)
+
+Table dataset_drug_class_summaries as DClassSum {
+  ref_name varchar
+  continent_name continent_enum
   gene gene_enum [note: 'Gene']
   drug_class drug_class_enum [note: 'Drug class']
 
@@ -286,36 +327,47 @@ Table article_drug_class_summaries as RefDCSum {
   pcnt_sdrm_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
-    (ref_name, gene, drug_class) [pk]
+    (ref_name, continent_name, gene, drug_class) [pk]
+    continent_name
   }
 
-  Note: 'Derived article summary by drug class table'
+  Note: 'Derived dataset summary by drug class table'
 }
 
-Table article_subtype_summaries as REFSubtypeSum {
-  ref_name varchar [ref: > Ref.ref_name]
+Ref: DClassSum.(ref_name, continent_name) > D.(ref_name, continent_name)
+
+Table dataset_subtype_summaries as DSubtypeSum {
+  ref_name varchar
+  continent_name continent_enum
   subtype varchar
 
   num_isolates int [not null, note: 'Number of isolates']
   num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
 
   indexes {
-    (ref_name, subtype) [pk]
+    (ref_name, continent_name, subtype) [pk]
+    continent_name
   }
 
-  Note: 'Derived article summary by subtype table'
+  Note: 'Derived dataset summary by subtype table'
 }
 
-Table article_surv_mutation_summaries as RefSDRM {
-  ref_name varchar [ref: > Ref.ref_name]
+Ref: DSubtypeSum.(ref_name, continent_name) > D.(ref_name, continent_name)
+
+Table dataset_surv_mutation_summaries as DSDRM {
+  ref_name varchar
+  continent_name continent_enum
   mutation varchar [ref: > SDRM.mutation]
 
   num_isolates int [not null, note: 'Number of isolates']
   num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
 
   indexes {
-    (ref_name, mutation) [pk]
+    (ref_name, continent_name, mutation) [pk]
+    continent_name
   }
 
   Note: 'Derived table storing the occurrence of SDRMs per articles'
 }
+
+Ref: DSDRM.(ref_name, continent_name) > D.(ref_name, continent_name)

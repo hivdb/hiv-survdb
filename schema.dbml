@@ -1,0 +1,309 @@
+Table articles as Ref {
+  ref_name varchar [
+    pk,
+    note: 'Manually assigned reference name'
+  ]
+  ref_id int [
+    unique,
+    note: 'RefID from HIVDB'
+  ]
+  doi varchar [
+    unique,
+    note: 'Digital Object Identifier (DOI)'
+  ]
+  medline_id int [
+    unique,
+    note: 'PubMed ID'
+  ]
+  url varchar [
+    unique,
+    note: 'Web address of this reference'
+  ]
+  published bool [
+    not null,
+    note: 'If the article is published or not'
+  ]
+  date_added date [not null]
+  date_updated date
+
+  indexes {
+    year
+  }
+
+  Note: 'Table storing core article identifiers that must be maintained manually'
+}
+
+Enum continent_enum {
+  'Africa'
+  'Asia'
+  'Europe'
+  'North America'
+  'Oceania'
+  'South America'
+}
+
+Table countries as Loc {
+  country_code char(3) [
+    pk,
+    note: 'ISO 3166-1 alpha-3 country code'
+  ]
+  country_name varchar [
+    unique,
+    not null,
+    note: 'The name of the country or region'
+  ]
+  continent_name continent_enum [not null]
+
+  indexes {
+    continent
+  }
+
+  Note: 'Constraint table storing country codes, names and their continents'
+}
+
+Table article_countries as RefLoc {
+  ref_name varchar [ref: > Ref.ref_name]
+  country_code char(3) [
+    note: 'ISO 3166-1 alpha-3 country code'
+  ]
+
+  indexes {
+    (ref_name, country_code) [pk]
+  }
+
+  Note: 'One-to-many table storing country information of articles'
+}
+
+Table journals as J {
+  journal_name varchar [
+    pk,
+    note: 'Name of a journal'
+  ]
+
+  Note: 'Constraint table for journals'
+}
+
+Table article_metadata as RefData {
+  ref_name varchar [pk, ref: > Ref.ref_name]
+  first_author varchar [
+    not null,
+    note: 'First author name. Should formed by the surname, a comma and the initial of given names (no dots)'
+  ]
+  title varchar [not null, note: 'Article title']
+  journal_name varchar [not null, note: 'Journal name']
+  year int [not null, note: 'Publish year']
+
+  Note: 'Derived table of article metadata from external sources such as crossref.org'
+}
+
+Enum article_status_enum {
+  'PLOSMED2015'
+  'JIntAIDSSoc2020'
+  'EX'
+  'New'
+}
+
+Table article_annotations as RefNote {
+  ref_name varchar [ref: > Ref.ref_name]
+  status article_status_enum [not null]
+  annotation varchar [note: 'Text annotation for this article']
+  action varchar [note: 'Machine readable filter/edit action when summarizing isolates']
+
+  Note: 'Table storing text annotation for articles'
+}
+
+Enum gene_enum {
+  PR
+  RT
+  IN
+}
+
+Enum drug_class_enum {
+  PI
+  NRTI
+  NNRTI
+  INSTI
+}
+
+Enum amino_acid_enum {
+  A [note: 'A/Ala, Alanine']
+  C [note: 'C/Cys, Cysteine']
+  D [note: 'D/Asp, Aspartic acid']
+  E [note: 'E/Glu, Glutamic acid']
+  F [note: 'F/Phe, Phenylalanine']
+  G [note: 'G/Gly, Glutamine']
+  H [note: 'H/His, Histidine']
+  I [note: 'I/Ile, Isoleucine']
+  K [note: 'K/Lys, Lysine']
+  L [note: 'L/Leu, Leucine']
+  M [note: 'M/Met, Methionine']
+  N [note: 'N/Asn, Asparagine']
+  P [note: 'P/Pro, Proline']
+  Q [note: 'Q/Gln, Glutamine']
+  R [note: 'R/Arg, Arginine']
+  S [note: 'S/Ser, Serine']
+  T [note: 'T/Thr, Threonine']
+  V [note: 'V/Val, Valine']
+  W [note: 'W/Trp, Tryptophan']
+  Y [note: 'Y/Tyr, Tyrosine']
+  X [note: 'Out-frame deletion']
+  stop [note: 'Stop codon']
+  del [note: 'Deletion']
+  ins [note: 'Insertion']
+}
+
+Table surv_mutations as SDRM {
+  mutation varchar [pk, note: 'Text mutation name']
+  gene gene_enum [not null, note: 'Gene']
+  drug_class drug_class_enum [not null, note: 'Drug Class']
+  position int [not null, note: 'AA Position in gene']
+  amino_acid amino_acid_enum [not null, note: 'Mutation amino acid']
+
+  indexes {
+    (gene, position, amino_acid) [unique]
+  }
+
+  Note: 'Lookup table of surveillance drug resistance mutations (SDRMs)'
+}
+
+Enum isolate_source_enum {
+  Plasma
+  PBMC
+  CSF
+  Blood
+  Panel
+  LN
+  CVS
+  Serum
+  Feces
+  Rectal
+  'Dried Blood Spot'
+  Kidney
+  FGT
+  FGT-RNA
+  Unknown
+}
+
+// Enum isolate_clone_method_enum {
+//   None
+//   MC
+//   NMC
+//   Cons
+//   BC
+//   Unknown
+// }
+
+Enum isolate_seq_method_enum {
+  Dideoxy
+  DNAChip
+  NGS
+  Unknown
+}
+
+Table isolates as Iso {
+  isolate_id int [pk, note: 'Isolate ID from HIVDB']
+  patient_id int [not null, note: 'PtID from HIVDB']
+  gene gene_enum [not null, note: 'Gene']
+  isolate_date date [not null]
+  subtype varchar [not null]
+  source isolate_source_enum
+  // clone_method isolate_clone_method_enum // looks like all clone_method's are None 
+  seq_method seq_method_enum
+  date_entered date [not null]
+
+  indexes {
+    (patient_id, gene, isolate_date, source, seq_method) [unique]
+  }
+
+  Note: 'Table storing isolate metadata imported from HIVDB'
+
+}
+
+Table isolate_mutations as IsoMut {
+  isolate_id [note: 'Isolate ID from HIVDB']
+  position int [note: 'AA Position in gene']
+  amino_acid amino_acid_enum [note: 'Mutation amino acid']
+
+  indexes {
+    (isolate_id, position, amino_acid) [pk]
+  }
+
+  Note: 'Table storing isolate mutations imported from HIVDB'
+}
+
+Table article_isolates as RefIso {
+  ref_name varchar [ref: > Ref.ref_name]
+  isolate_id int [not null, note: 'Isolate ID from HIVDB']
+
+  indexes {
+    (ref_name, isolate_id) [pk]
+  }
+
+  Note: 'Many-to-many table storing relationship between articles and isolates'
+}
+
+Table article_summaries as RefSum {
+  ref_name varchar [pk, ref: > Ref.ref_name]
+  isolate_year_begin int [not null, note: 'Isolate year range begin']
+  isolate_year_end int [not null, note: 'Isolate year range end']
+  isolate_sources varchar [not null, note: 'comma separated distinct isolate sources']
+  isolate_seq_methods varchar [not null, note: 'comma separated distinct sequence methods']
+
+  num_patients int [not null, note: 'Number of included patients by RefNote.action']
+  num_isolates int [not null, note: 'Number of included isolates']
+  num_sdrm_isolates int [not null, note: 'Number of included isolates with SDRMs']
+  pcnt_sdrm_isolates float [not null, note: 'Percent of included isolates with SDRMs']
+
+  Note: 'Derived article summary table'
+}
+
+Table article_gene_summaries as RefGeneSum {
+  ref_name varchar [ref: > Ref.ref_name]
+  gene gene_enum [note: 'Gene']
+
+  num_isolates int [not null, note: 'Number of included isolates']
+
+  indexes {
+    (ref_name, gene) [pk]
+
+  Note: 'Derived article summary by gene table'
+}
+
+Table article_drug_class_summaries as RefDCSum {
+  ref_name varchar [ref: > Ref.ref_name]
+  gene gene_enum [note: 'Gene']
+  drug_class drug_class_enum [note: 'Drug class']
+
+  num_sdrm_isolates int [not null, note: 'Number of included isolates with SDRMs']
+  pcnt_sdrm_isolates float [not null, note: 'Percent of included isolates with SDRMs']
+
+  indexes {
+    (ref_name, gene, drug_class) [pk]
+
+  Note: 'Derived article summary by drug class table'
+}
+
+Table article_subtype_summaries as REFSubtypeSum {
+  ref_name varchar [ref: > Ref.ref_name]
+  subtype varchar
+
+  num_isolates int [not null, note: 'Number of included isolates']
+
+  indexes {
+    (ref_name, subtype) [pk]
+
+  Note: 'Derived article summary by subtype table'
+}
+
+Table article_surv_mutation_summaries as RefSDRM {
+  ref_name varchar [ref: > Ref.ref_name]
+  mutation varchar [ref: > SDRM.mutation]
+
+  num_isolates int [not null, note: 'Number of included isolates']
+
+  indexes {
+    (ref_name, mutation) [pk]
+  }
+
+  Note: 'Derived table storing the occurrence of SDRMs per articles'
+}

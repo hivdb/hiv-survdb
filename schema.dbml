@@ -26,20 +26,16 @@ Table articles as Ref {
   date_added date [not null]
   date_updated date
 
-  indexes {
-    year
-  }
-
   Note: 'Table storing core article identifiers that must be maintained manually'
 }
 
 Enum continent_enum {
-  'Africa'
-  'Asia'
-  'Europe'
-  'North America'
-  'Oceania'
-  'South America'
+  "Africa"
+  "Asia"
+  "Europe"
+  "North America"
+  "Oceania"
+  "South America"
 }
 
 Table countries as Loc {
@@ -55,7 +51,7 @@ Table countries as Loc {
   continent_name continent_enum [not null]
 
   indexes {
-    continent
+    continent_name
   }
 
   Note: 'Constraint table storing country codes, names and their continents'
@@ -64,6 +60,7 @@ Table countries as Loc {
 Table article_countries as RefLoc {
   ref_name varchar [ref: > Ref.ref_name]
   country_code char(3) [
+    ref: > Loc.country_code,
     note: 'ISO 3166-1 alpha-3 country code'
   ]
 
@@ -90,21 +87,21 @@ Table article_metadata as RefData {
     note: 'First author name. Should formed by the surname, a comma and the initial of given names (no dots)'
   ]
   title varchar [not null, note: 'Article title']
-  journal_name varchar [not null, note: 'Journal name']
+  journal_name varchar [ref: > J.journal_name, not null, note: 'Journal name']
   year int [not null, note: 'Publish year']
 
   Note: 'Derived table of article metadata from external sources such as crossref.org'
 }
 
 Enum article_status_enum {
-  'PLOSMED2015'
-  'JIntAIDSSoc2020'
-  'EX'
-  'New'
+  "PLOSMED2015"
+  "JIntAIDSSoc2020"
+  "EX"
+  "New"
 }
 
 Table article_annotations as RefNote {
-  ref_name varchar [ref: > Ref.ref_name]
+  ref_name varchar [pk, ref: > Ref.ref_name]
   status article_status_enum [not null]
   annotation varchar [note: 'Text annotation for this article']
   action varchar [note: 'Machine readable filter/edit action when summarizing isolates']
@@ -177,10 +174,10 @@ Enum isolate_source_enum {
   Serum
   Feces
   Rectal
-  'Dried Blood Spot'
+  "Dried Blood Spot"
   Kidney
   FGT
-  FGT-RNA
+  "FGT-RNA"
   Unknown
 }
 
@@ -209,6 +206,10 @@ Table isolates as Iso {
   source isolate_source_enum
   // clone_method isolate_clone_method_enum // looks like all clone_method's are None 
   seq_method seq_method_enum
+  country_code char(3) [
+    ref: > Loc.country_code,
+    note: 'ISO 3166-1 alpha-3 country code where this isolate was collected'
+  ]
   date_entered date [not null]
 
   indexes {
@@ -220,7 +221,7 @@ Table isolates as Iso {
 }
 
 Table isolate_mutations as IsoMut {
-  isolate_id [note: 'Isolate ID from HIVDB']
+  isolate_id int [ref: > Iso.isolate_id, note: 'Isolate ID from HIVDB']
   position int [note: 'AA Position in gene']
   amino_acid amino_acid_enum [note: 'Mutation amino acid']
 
@@ -233,7 +234,7 @@ Table isolate_mutations as IsoMut {
 
 Table article_isolates as RefIso {
   ref_name varchar [ref: > Ref.ref_name]
-  isolate_id int [not null, note: 'Isolate ID from HIVDB']
+  isolate_id int [ref: > Iso.isolate_id, not null, note: 'Isolate ID from HIVDB']
 
   indexes {
     (ref_name, isolate_id) [pk]
@@ -249,10 +250,13 @@ Table article_summaries as RefSum {
   isolate_sources varchar [not null, note: 'comma separated distinct isolate sources']
   isolate_seq_methods varchar [not null, note: 'comma separated distinct sequence methods']
 
-  num_patients int [not null, note: 'Number of included patients by RefNote.action']
-  num_isolates int [not null, note: 'Number of included isolates']
-  num_sdrm_isolates int [not null, note: 'Number of included isolates with SDRMs']
-  pcnt_sdrm_isolates float [not null, note: 'Percent of included isolates with SDRMs']
+  num_patients int [not null, note: 'Number of patients filtered by RefNote.action']
+  num_isolates int [not null, note: 'Number of isolates']
+  num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
+  num_sdrm_isolates int [not null, note: 'Number of isolates with SDRMs']
+  num_sdrm_isolates_accepted int [not null, note: 'Number of isolates with SDRMs accepted by CPR']
+  pcnt_sdrm_isolates float [not null, note: 'Percent of isolates with SDRMs']
+  pcnt_sdrm_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
 
   Note: 'Derived article summary table'
 }
@@ -261,10 +265,12 @@ Table article_gene_summaries as RefGeneSum {
   ref_name varchar [ref: > Ref.ref_name]
   gene gene_enum [note: 'Gene']
 
-  num_isolates int [not null, note: 'Number of included isolates']
+  num_isolates int [not null, note: 'Number of isolates']
+  num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
 
   indexes {
     (ref_name, gene) [pk]
+  }
 
   Note: 'Derived article summary by gene table'
 }
@@ -274,11 +280,14 @@ Table article_drug_class_summaries as RefDCSum {
   gene gene_enum [note: 'Gene']
   drug_class drug_class_enum [note: 'Drug class']
 
-  num_sdrm_isolates int [not null, note: 'Number of included isolates with SDRMs']
-  pcnt_sdrm_isolates float [not null, note: 'Percent of included isolates with SDRMs']
+  num_sdrm_isolates int [not null, note: 'Number of isolates with SDRMs']
+  num_sdrm_isolates_accepted int [not null, note: 'Number of isolates with SDRMs accepted by CPR']
+  pcnt_sdrm_isolates float [not null, note: 'Percent of isolates with SDRMs']
+  pcnt_sdrm_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
     (ref_name, gene, drug_class) [pk]
+  }
 
   Note: 'Derived article summary by drug class table'
 }
@@ -287,10 +296,12 @@ Table article_subtype_summaries as REFSubtypeSum {
   ref_name varchar [ref: > Ref.ref_name]
   subtype varchar
 
-  num_isolates int [not null, note: 'Number of included isolates']
+  num_isolates int [not null, note: 'Number of isolates']
+  num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
 
   indexes {
     (ref_name, subtype) [pk]
+  }
 
   Note: 'Derived article summary by subtype table'
 }
@@ -299,7 +310,8 @@ Table article_surv_mutation_summaries as RefSDRM {
   ref_name varchar [ref: > Ref.ref_name]
   mutation varchar [ref: > SDRM.mutation]
 
-  num_isolates int [not null, note: 'Number of included isolates']
+  num_isolates int [not null, note: 'Number of isolates']
+  num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
 
   indexes {
     (ref_name, mutation) [pk]

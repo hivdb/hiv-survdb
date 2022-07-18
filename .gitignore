@@ -1,0 +1,10 @@
+.ssh-devnext2n-mysql.pid
+docker-envfile
+
+*.swp
+*.orig
+*.log
+DS_Store
+local/
+build/
+.DS_Store

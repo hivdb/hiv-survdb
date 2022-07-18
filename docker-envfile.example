@@ -1,0 +1,24 @@
+# please make a duplicate and name it as "docker-envfile".
+
+# ============================================
+# Environ variables required by "make release"
+# ============================================
+
+# GitHub Token, required
+# Can be created at https://github.com/settings/tokens/new
+# Please select at least "repo" scope when generating the new token
+GITHUB_TOKEN=ghp_XXXXXXXXXXXXXXXXXX
+
+# GitHub authenticating user name, required
+GITHUB_AUTH_USER=your_github_account
+
+
+# ====================================================
+# Environ variables required by "make sync-from-hivdb"
+# ====================================================
+
+# HIVDB@devnext2n user
+HIVDB_USER=admin
+
+# HIVDB@devnext2n password
+HIVDB_PASSWORD=5uP3R-5a7E-9AS$vv0r|)

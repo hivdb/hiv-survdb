@@ -21,7 +21,12 @@ function addbom() {
 }
 
 function query() {
-  mysql --batch -h$HIVDB_HOST -u$HIVDB_USER -p$HIVDB_PASSWORD HIVDB2 "$@" | csvtk tab2csv -l
+  tmpfile=$(mktemp)
+  mysql --batch -h$HIVDB_HOST -u$HIVDB_USER -p$HIVDB_PASSWORD HIVDB2 "$@" > "$tmpfile"
+  if [ -s "$tmpfile" ]; then
+    cat "$tmpfile" | csvtk tab2csv -l
+  fi
+  rm "$tmpfile"
 }
 
 
@@ -38,10 +43,11 @@ query > $TMP_ARTICLES <<EOF
     'NULL' as doi,
     R.MedlineID as medline_id,
     'NULL' as url,
-    (CASE WHEN Published = 'Yes' THEN 'TRUE' ELSE 'FALSE' END) AS published
+    CASE WHEN Published = 'Yes' THEN 'TRUE' ELSE 'FALSE' END AS published
   FROM tblSurRefs SR, tblReferences R
   WHERE
-    SR.RefID = R.RefID
+    SR.RefID = R.RefID AND
+    R.RefID NOT IN (1154)
 EOF
 
 if [ ! -f $TARGET_ARTICLES -o ! -s $TARGET_ARTICLES ]; then
@@ -94,12 +100,16 @@ query > $TMP_REFMETA.1 <<EOF
     R.RefID as ref_id,
     R.Author as first_author,
     R.Title as title,
-    R.Journal as journal_name,
+    CASE
+       WHEN LOWER(R.Journal) = 'plos one' THEN 'PLoS ONE'
+       ELSE R.Journal
+    END as journal_name,
     R.RefYear as year
   FROM tblReferences R
   WHERE EXISTS (
     SELECT 1 FROM tblSurRefs SR WHERE
-      SR.RefID=R.RefID
+      SR.RefID=R.RefID AND
+      R.RefID NOT IN (1154)
   )
 EOF
 
@@ -135,10 +145,23 @@ do
   
   query > $TMP_REFISO <<EOF
     SELECT DISTINCT
-      '$(sql_escape ${ref_name})' as ref_name,
+      '$(sql_escape "${ref_name}")' as ref_name,
       RL.IsolateID as isolate_id
     FROM tblRefLink RL
-    WHERE RL.RefID = ${ref_id}
+    WHERE
+      RL.RefID = ${ref_id} AND
+      NOT EXISTS (
+        SELECT 1 FROM tblIsolateFilters IsoF
+        WHERE
+          RL.IsolateID = IsoF.IsolateID AND
+          IsoF.Filter = 'QA'
+      ) AND
+      EXISTS (
+        SELECT 1 FROM tblIsolates I
+        WHERE
+          RL.IsolateID = I.IsolateID AND
+          I.Type = 'Clinical'
+      )
 EOF
   
   addbom $TMP_REFISO
@@ -182,13 +205,36 @@ do
     FROM tblRefLink RL, tblIsolates I, tblSubtypes S, tblClinIsolates CI, tblPatients P
     WHERE
       RL.RefID = ${ref_id} AND
+      NOT EXISTS (
+        SELECT 1 FROM tblIsolateFilters IsoF
+        WHERE
+          RL.IsolateID = IsoF.IsolateID AND
+          IsoF.Filter = 'QA'
+      ) AND
       RL.IsolateID = I.IsolateID AND
       RL.IsolateID = S.IsolateID AND
       RL.IsolateID = CI.IsolateID AND
+      (
+        RL.Priority = 1 OR
+        NOT EXISTS (
+          SELECT 1 FROM tblSurRefs SR, tblRefLink RL2
+          WHERE
+            SR.RefID != ${ref_id} AND
+            SR.RefID = RL2.RefID AND
+            RL2.IsolateID = RL.IsolateID AND
+            RL2.Priority = 1
+        )
+      ) AND
+      I.Type = 'Clinical' AND
       I.PtID = P.PtID
     ORDER BY
       RL.IsolateID
 EOF
+
+  if [ ! -s $TMP_ISO.1 ]; then
+    echo "Skip empty $TARGET_ISO"
+    continue
+  fi
 
   csvtk join --left-join $TMP_ISO.1 payload/suppl-tables/country_names_and_codes.csv -f country_name --na NULL |
     csvtk cut -f isolate_id,patient_id,gene,isolate_date,subtype,source,seq_method,country_code,date_entered > $TMP_ISO.2
@@ -225,21 +271,50 @@ do
       DISTINCT
       RL.IsolateID as isolate_id,
       M.CodonPos as position,
-      (CASE
+      CASE
         WHEN M.Insertion = 'Yes' THEN 'ins'
         WHEN M.MutAA = '~' THEN 'del'
         WHEN M.MutAA = '*' THEN 'stop'
         ELSE M.MutAA
-      END) as amino_acid
+      END as amino_acid
     FROM tblRefLink RL, tblSequences S, _Mutations M
     WHERE
       RL.RefID = ${ref_id} AND
+      NOT EXISTS (
+        SELECT 1 FROM tblIsolateFilters IsoF
+        WHERE
+          RL.IsolateID = IsoF.IsolateID AND
+          IsoF.Filter = 'QA'
+      ) AND
       RL.IsolateID = S.IsolateID AND
+      (
+        RL.Priority = 1 OR
+        NOT EXISTS (
+          SELECT 1 FROM tblSurRefs SR, tblRefLink RL2
+          WHERE
+            SR.RefID != ${ref_id} AND
+            SR.RefID = RL2.RefID AND
+            RL2.IsolateID = RL.IsolateID AND
+            RL2.Priority = 1
+        )
+      ) AND
+      EXISTS (
+        SELECT 1 FROM tblIsolates I
+        WHERE
+          RL.IsolateID = I.IsolateID AND
+          I.Type = 'Clinical'
+      ) AND
       S.SequenceID = M.SequenceID AND
       M.Mixture = 'No' AND
       M.MutAA != '.'
     ORDER BY RL.IsolateID, M.CodonPos, M.MutAA
 EOF
+
+
+  if [ ! -s $TMP_ISOMUT ]; then
+    echo "Skip empty $TARGET_ISOMUT"
+    continue
+  fi
   
   addbom $TMP_ISOMUT
   mv $TMP_ISOMUT $TARGET_ISOMUT

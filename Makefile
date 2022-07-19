@@ -91,6 +91,13 @@ sync-from-hivdb: update-builder docker-envfile .ssh-devnext2n-mysql.pid
    		hivdb/hiv-survdb-builder:latest \
 		scripts/sync-from-hivdb.sh
 
+sync-surv-mutations: update-builder
+	@docker run --rm -it \
+		--volume=$(shell pwd):/hiv-survdb/ \
+		--volume=$(shell dirname $$(pwd))/hiv-survdb-payload:/hiv-survdb-payload \
+   		hivdb/hiv-survdb-builder:latest \
+		scripts/sync-surv-mutations.sh
+
 sync-to-s3: update-builder docker-envfile
 	@docker run --rm -it \
 		--volume=$(shell pwd):/hiv-survdb/ \

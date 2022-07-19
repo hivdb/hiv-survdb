@@ -21,6 +21,13 @@ Table articles as Ref {
     unique,
     note: 'Web address of this reference'
   ]
+  first_author varchar [
+    not null,
+    note: 'First author name. Should formed by the surname, a comma and the initial of given names (no dots)'
+  ]
+  title varchar [not null, note: 'Article title']
+  journal_name varchar [ref: > J.journal_name, not null, note: 'Journal name']
+  year int [not null, note: 'Publish year']
   published bool [
     not null,
     note: 'If the article is published or not'
@@ -70,7 +77,7 @@ Table article_countries as RefLoc {
     (ref_name, country_code) [pk]
   }
 
-  Note: 'One-to-many table storing country information of articles'
+  Note: 'One-to-many table storing country information of articles; derived from isolate countries'
 }
 
 Table journals as J {
@@ -80,19 +87,6 @@ Table journals as J {
   ]
 
   Note: 'Constraint table for journals'
-}
-
-Table article_metadata as RefData {
-  ref_name varchar [pk, ref: > Ref.ref_name]
-  first_author varchar [
-    not null,
-    note: 'First author name. Should formed by the surname, a comma and the initial of given names (no dots)'
-  ]
-  title varchar [not null, note: 'Article title']
-  journal_name varchar [ref: > J.journal_name, not null, note: 'Journal name']
-  year int [not null, note: 'Publish year']
-
-  Note: 'Derived table of article metadata from external sources such as crossref.org'
 }
 
 Enum article_status_enum {
@@ -149,6 +143,15 @@ Enum amino_acid_enum {
   stop [note: 'Stop codon']
   del [note: 'Deletion']
   ins [note: 'Insertion']
+}
+
+Table drug_classes as DClass {
+  drug_class drug_class_enum [pk]
+  gene gene_enum
+
+  indexes {
+    gene
+  }
 }
 
 Table surv_mutations as SDRM {
@@ -212,10 +215,17 @@ Table isolates as Iso {
     ref: > Loc.country_code,
     note: 'ISO 3166-1 alpha-3 country code where this isolate was collected'
   ]
+  genbank_accn varchar [
+    note: 'Genbank accession number(s); comma delimited'
+  ]
+  cpr_excluded boolean [
+    note: 'The isolate is excluded by CPR if true'
+  ]
   date_entered date [not null]
 
   indexes {
-    (patient_id, gene, isolate_date, source, seq_method) [unique]
+    genbank_accn
+    cpr_excluded
   }
 
   Note: 'Table storing isolate metadata imported from HIVDB'
@@ -226,6 +236,7 @@ Table isolate_mutations as IsoMut {
   isolate_id int [ref: > Iso.isolate_id, note: 'Isolate ID from HIVDB']
   position int [note: 'AA Position in gene']
   amino_acid amino_acid_enum [note: 'Mutation amino acid']
+  is_mixture boolean [note: 'If this position has mixtures']
 
   indexes {
     (isolate_id, position, amino_acid) [pk]
@@ -259,8 +270,8 @@ Table datasets as D {
   ref_name varchar [ref: > Ref.ref_name]
   continent_name continent_enum
 
-  latitude float [not null, note: 'Manually maintained latitude of the dataset']
-  longitude float [not null, note: 'Manually maintained longitude of the dataset']
+  // latitude float [not null, note: 'Manually maintained latitude of the dataset']
+  // longitude float [not null, note: 'Manually maintained longitude of the dataset']
 
   indexes {
     (ref_name, continent_name) [pk]
@@ -304,6 +315,10 @@ Table dataset_gene_summaries as DGeneSum {
 
   num_isolates int [not null, note: 'Number of isolates']
   num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
+  num_sdrm_isolates int [not null, note: 'Number of isolates with SDRMs']
+  num_sdrm_isolates_accepted int [not null, note: 'Number of isolates with SDRMs accepted by CPR']
+  pcnt_sdrm_isolates float [not null, note: 'Percent of isolates with SDRMs']
+  pcnt_sdrm_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
     (ref_name, continent_name, gene) [pk]

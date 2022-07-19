@@ -25,8 +25,8 @@ Table articles as Ref {
     not null,
     note: 'If the article is published or not'
   ]
-  date_added date [not null]
-  date_updated date
+  // date_added date [not null]
+  // date_updated date
 
   Note: 'Table storing core article identifiers that must be maintained manually'
 }
@@ -207,7 +207,7 @@ Table isolates as Iso {
   subtype varchar [not null]
   source isolate_source_enum
   // clone_method isolate_clone_method_enum // looks like all clone_method's are None 
-  seq_method seq_method_enum
+  seq_method isolate_seq_method_enum
   country_code char(3) [
     ref: > Loc.country_code,
     note: 'ISO 3166-1 alpha-3 country code where this isolate was collected'
@@ -371,3 +371,9 @@ Table dataset_surv_mutation_summaries as DSDRM {
 }
 
 Ref: DSDRM.(ref_name, continent_name) > D.(ref_name, continent_name)
+
+
+Table last_update {
+  scope varchar [pk]
+  last_update timestamptz [not null]
+}

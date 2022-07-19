@@ -15,4 +15,5 @@ RUN apt-get -y install nodejs
 RUN npm install --location=global @dbml/cli
 RUN curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip && \
     unzip awscliv2.zip && aws/install && rm -rf awscliv2.zip aws
+RUN apt-get -y install git
 RUN mkdir -p /local

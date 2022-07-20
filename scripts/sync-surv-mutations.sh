@@ -35,7 +35,7 @@ with open('payload/tables/surv_mutations.csv', 'w', encoding='utf-8-sig') as fp:
           aa = 'del'
         elif aa == '*':
           aa = 'stop'
-        muttext = '{}{}{}'.format(refaa, position, aa)
+        muttext = '{}:{}{}{}'.format(gene, refaa, position, aa)
         rows.append([muttext, gene, drug_class, position, aa])
     rows.sort(key=lambda r: (r[3], r[4]))
     writer.writerows(rows)

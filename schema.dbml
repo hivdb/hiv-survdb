@@ -336,10 +336,10 @@ Table dataset_drug_class_summaries as DClassSum {
   gene gene_enum [note: 'Gene']
   drug_class drug_class_enum [note: 'Drug class']
 
-  num_sdrm_isolates int [not null, note: 'Number of isolates with SDRMs']
-  num_sdrm_isolates_accepted int [not null, note: 'Number of isolates with SDRMs accepted by CPR']
-  pcnt_sdrm_isolates float [not null, note: 'Percent of isolates with SDRMs']
-  pcnt_sdrm_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
+  num_isolates int [not null, note: 'Number of isolates with SDRMs']
+  num_isolates_accepted int [not null, note: 'Number of isolates with SDRMs accepted by CPR']
+  pcnt_isolates float [not null, note: 'Percent of isolates with SDRMs']
+  pcnt_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
     (ref_name, continent_name, gene, drug_class) [pk]
@@ -354,13 +354,18 @@ Ref: DClassSum.(ref_name, continent_name) > D.(ref_name, continent_name)
 Table dataset_subtype_summaries as DSubtypeSum {
   ref_name varchar
   continent_name continent_enum
+  gene gene_enum
   subtype varchar
 
   num_isolates int [not null, note: 'Number of isolates']
   num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
+  num_sdrm_isolates int [not null, note: 'Number of isolates with SDRMs']
+  num_sdrm_isolates_accepted int [not null, note: 'Number of isolates with SDRMs accepted by CPR']
+  pcnt_sdrm_isolates float [not null, note: 'Percent of isolates with SDRMs']
+  pcnt_sdrm_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
-    (ref_name, continent_name, subtype) [pk]
+    (ref_name, continent_name, gene, subtype) [pk]
     continent_name
   }
 
@@ -372,10 +377,13 @@ Ref: DSubtypeSum.(ref_name, continent_name) > D.(ref_name, continent_name)
 Table dataset_surv_mutation_summaries as DSDRM {
   ref_name varchar
   continent_name continent_enum
+  gene gene_enum
   mutation varchar [ref: > SDRM.mutation]
 
   num_isolates int [not null, note: 'Number of isolates']
   num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
+  pcnt_isolates float [not null, note: 'Percent of isolates with SDRMs']
+  pcnt_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
     (ref_name, continent_name, mutation) [pk]

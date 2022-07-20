@@ -340,8 +340,6 @@ do
         )
       ) AND
       S.SequenceID = M.SequenceID AND
-      -- TODO: what to do with mixtures?
-      M.Mixture = 'No' AND
       M.MutAA != '.'
     ORDER BY RL.IsolateID, M.CodonPos, M.MutAA
 EOF

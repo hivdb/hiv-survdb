@@ -107,6 +107,9 @@ sync-to-s3: update-builder docker-envfile
    		hivdb/hiv-survdb-builder:latest \
 		scripts/sync-to-s3.sh
 
+payload/sequences: scripts/export-sequences-from-hivdb.sh docker-envfile
+	@HIVDB_HOST=${LOIP} scripts/export-sequences-from-hivdb.sh payload/sequences
+
 devdb: update-builder network
 	@docker run \
 		--rm -it \
@@ -136,5 +139,18 @@ psql-devdb:
 
 psql-devdb-no-docker:
 	@psql -U postgres -h localhost -p 6547
+
+payload/suppl-tables/non_genbank_articles.csv: scripts/find-non-genbank-refs.sh
+	@scripts/find-non-genbank-refs.sh "$@"
+
+sync-cpr-urls: update-builder docker-envfile
+	@docker run --rm -it \
+		--volume=$(shell pwd):/hiv-survdb/ \
+		--volume=$(shell dirname $$(pwd))/hiv-survdb-payload:/hiv-survdb-payload \
+		--volume ~/.aws:/root/.aws:ro \
+		--env-file ./docker-envfile \
+   		hivdb/hiv-survdb-builder:latest \
+		scripts/sync-cpr-urls.sh
+
 
 .PHONY: autofill network devdb *-devdb builder *-builder *-sqlite release pre-release debug-* sync-* update-builder new-study import-*

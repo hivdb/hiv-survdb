@@ -105,6 +105,21 @@ Table article_annotations as RefNote {
   Note: 'Table storing text annotation for articles'
 }
 
+Enum cpr_test_code_enum {
+  PRRT
+  IN
+}
+
+Table article_cpr_urls as CPR {
+  ref_name varchar [ref: > Ref.ref_name]
+  test_code cpr_test_code_enum
+  url varchar [unique, not null]
+
+  indexes {
+    (ref_name, test_code) [pk]
+  }
+}
+
 Enum gene_enum {
   PR
   RT

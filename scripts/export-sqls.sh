@@ -42,6 +42,7 @@ echo "Written to $TARGET_DIR/01_schema.sql"
 copy_csv payload/tables/drug_classes.csv drug_classes >> $TARGET_DIR/02_data_tables.sql
 copy_csv payload/tables/journals.csv journals >> $TARGET_DIR/02_data_tables.sql
 copy_csv payload/tables/articles.csv articles >> $TARGET_DIR/02_data_tables.sql
+copy_csv payload/tables/article_cpr_urls.csv article_cpr_urls >> $TARGET_DIR/02_data_tables.sql
 copy_csv payload/tables/article_annotations.csv article_annotations >> $TARGET_DIR/02_data_tables.sql
 copy_csv payload/tables/countries.csv countries >> $TARGET_DIR/02_data_tables.sql
 copy_csv payload/tables/surv_mutations.csv surv_mutations >> $TARGET_DIR/02_data_tables.sql

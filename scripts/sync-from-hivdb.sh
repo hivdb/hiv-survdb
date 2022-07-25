@@ -154,6 +154,10 @@ cat $TARGET_ARTICLES |
 do
   TMP_REFISO="${TMP_REFISO_DIR}/$(refname_for_file "$ref_name")-refiso.csv"
   TARGET_REFISO="${TARGET_REFISO_DIR}/$(refname_for_file "$ref_name")-refiso.csv"
+  if [ -f $TARGET_REFISO ]; then
+    echo "Conflict refname_for_file: $(refname_for_file "$ref_name")" >&2
+    exit 1
+  fi
   
   query > $TMP_REFISO <<EOF
     SELECT DISTINCT
@@ -173,6 +177,12 @@ do
         WHERE
           RL.IsolateID = I.IsolateID AND
           I.Type = 'Clinical'
+      ) AND
+      NOT EXISTS (
+        SELECT 1 FROM tblSequences S
+        WHERE
+        RL.IsolateID = S.IsolateID AND
+        S.SeqType != 'Sequence'
       )
 EOF
   
@@ -225,6 +235,12 @@ do
       --     RL.IsolateID = IsoF.IsolateID AND
       --     IsoF.Filter = 'QA'
       -- ) AND
+      NOT EXISTS (
+        SELECT 1 FROM tblSequences S
+        WHERE
+        RL.IsolateID = S.IsolateID AND
+        S.SeqType != 'Sequence'
+      ) AND
       RL.IsolateID = I.IsolateID AND
       RL.IsolateID = S.IsolateID AND
       RL.IsolateID = CI.IsolateID AND
@@ -313,6 +329,12 @@ do
       --     RL.IsolateID = IsoF.IsolateID AND
       --     IsoF.Filter = 'QA'
       -- ) AND
+      NOT EXISTS (
+        SELECT 1 FROM tblSequences S
+        WHERE
+        RL.IsolateID = S.IsolateID AND
+        S.SeqType != 'Sequence'
+      ) AND
       RL.IsolateID = S.IsolateID AND
       (
         RL.Priority = 1 OR
@@ -330,14 +352,6 @@ do
         WHERE
           RL.IsolateID = I.IsolateID AND
           I.Type = 'Clinical'
-      ) AND
-      (
-        S.SeqType = 'Consensus' OR
-        NOT EXISTS (
-          SELECT 1 FROM tblSequences S2 WHERE
-            RL.IsolateID = S2.IsolateID AND
-            S.SequenceID != S2.SequenceID
-        )
       ) AND
       S.SequenceID = M.SequenceID AND
       M.MutAA != '.'

@@ -239,6 +239,7 @@ Table isolates as Iso {
   date_entered date [not null]
 
   indexes {
+    (isolate_id, patient_id, gene, isolate_date) [unique]
     genbank_accn
     cpr_excluded
   }

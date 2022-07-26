@@ -41,6 +41,7 @@ autofill: update-builder
 
 local-release: update-builder network docker-envfile
 	@docker run --rm -it \
+		--shm-size=1536m \
 		--volume=$(shell pwd):/hiv-survdb/ \
 		--volume=$(shell dirname $$(pwd))/hiv-survdb-payload:/hiv-survdb-payload \
 		--network=hiv-survdb-network \
@@ -70,17 +71,6 @@ pre-release: update-builder network docker-envfile
 		--env-file ./docker-envfile \
    		hivdb/hiv-survdb-builder:latest \
 		scripts/github-release.sh --pre-release
-
-debug-export-sqlite: update-builder network docker-envfile
-	@docker run --rm -it \
-		--shm-size=1536m \
-		--volume=$(shell pwd):/hiv-survdb/ \
-		--volume=$(shell dirname $$(pwd))/hiv-survdb-payload:/hiv-survdb-payload \
-		--network=hiv-survdb-network \
-		--volume ~/.aws:/root/.aws:ro \
-		--env-file ./docker-envfile \
-   		hivdb/hiv-survdb-builder:latest \
-		scripts/export-sqlite.sh debug
 
 sync-from-hivdb: update-builder docker-envfile .ssh-devnext2n-mysql.pid
 	@docker run --rm -it \

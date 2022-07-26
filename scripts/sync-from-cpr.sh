@@ -55,7 +55,7 @@ writer = csv.writer(sys.stdout)
 writer.writerow(['patient_id', 'gene', 'isolate_date', 'mutation', 'position', 'amino_acid', 'is_mixture'])
 for row in reader:
   try:
-    refaa, pos, aas = re.match(r'^([^\d])(\d+)([^\d]+)$', row['mutation']).groups()
+    refaa, pos, aas = re.search(r'^([^\d])(\d+)([^\d\s(]+)', row['mutation']).groups()
   except AttributeError:
     raise AttributeError('Malformed mutation: {!r}'.format(row['mutation']))
   if '_' in aas or aas in ('ins', 'Insertion'):
@@ -76,12 +76,47 @@ for row in reader:
       row['patient_id'],
       row['gene'],
       row['isolate_date'],
-      '{}{}{}'.format(refaa, pos, aa),
+      '{}:{}{}{}'.format(row['gene'], refaa, pos, aa),
       pos,
       aa,
       int(is_mixture)
     ])
 "
+}
+
+function read_excluded_surv_mutations() {
+  local step1=$(mktemp)
+  local step2=$(mktemp)
+
+  cat $1 |
+    csvtk cut -f 'sequenceID,pr.SDRMFiltered,rt.SDRMFiltered,in.SDRMFiltered' |
+    csvtk mutate -f sequenceID -p 'PtID(\d+)\.' -n patient_id |
+    csvtk mutate -f sequenceID -p '\.(\d{8})\.(?:PRRT|IN)' -n isolate_date |
+    csvtk replace -f isolate_date -p '(\d{4})(\d{2})(\d{2})' -r '$1-$2-$3' > $step1
+  cat $step1 |
+    csvtk cut -f 'patient_id,isolate_date,pr.SDRMFiltered' |
+    csvtk rename -f 'pr.SDRMFiltered' -n 'mutation' |
+    csvtk filter2 -f '$mutation != "NA" && $mutation != "None" && $mutation != ""' |
+    csvtk mutate2 -n gene -e '"PR"' |
+    csvtk unfold -f 'mutation' -s "; " > $step2
+  cat $step1 |
+    csvtk cut -f 'patient_id,isolate_date,rt.SDRMFiltered' |
+    csvtk rename -f 'rt.SDRMFiltered' -n 'mutation' |
+    csvtk filter2 -f '$mutation != "NA" && $mutation != "None" && $mutation != ""' |
+    csvtk mutate2 -n gene -e '"RT"' |
+    csvtk unfold -f 'mutation' -s "; " |
+    csvtk del-header >> $step2
+  cat $step1 |
+    csvtk cut -f 'patient_id,isolate_date,in.SDRMFiltered' |
+    csvtk rename -f 'in.SDRMFiltered' -n 'mutation' |
+    csvtk filter2 -f '$mutation != "NA" && $mutation != "None" && $mutation != ""' |
+    csvtk mutate2 -n gene -e '"IN"' |
+    csvtk unfold -f 'mutation' -s "; " |
+    csvtk del-header >> $step2
+
+  cat $step2 | unfold_mutations
+
+  rm $step1 $step2
 }
 
 function read_cpr_mutations() {
@@ -165,20 +200,39 @@ function update_isolates() {
         csvtk cut -f isolate_id,position,amino_acid,is_mixture > $TARGET_MUTATIONS
       rm $TMP_CPR_MUTS
     fi
+
+    # ========================================
+    # Update `isolate_excluded_surv_mutations`
+    # ========================================
+    if [ -f $TARGET_ISOLATES ]; then
+      local TMP_EX_SDRMS=$(mktemp)
+      local TARGET_EX_SDRMS=payload/tables/isolate_excluded_surv_mutations.d/$1-$2-exsdrms.csv
+      read_excluded_surv_mutations $TMP_CPR_ANALYSIS > $TMP_EX_SDRMS
+      csvtk join $TMP_EX_SDRMS $TARGET_ISOLATES -f patient_id,gene,isolate_date --na NULL |
+        csvtk cut -f isolate_id,mutation,position,amino_acid > $TARGET_EX_SDRMS
+      rm $TMP_EX_SDRMS
+    fi
+
   fi
 }
 
+mkdir -p payload/tables/isolate_mutations.d
+mkdir -p payload/tables/isolate_excluded_surv_mutations.d
 rm -f payload/tables/isolate_mutations.d/*.csv
+rm -f payload/tables/isolate_excluded_surv_mutations.d/*.csv
 
 tail -n +2 payload/tables/articles.csv | cut -d ',' -f 1 | while read ref_name; do
   lower_ref_name=$(refname_for_file $ref_name)
-  PRRT_MUTATIONS=payload/tables/isolate_mutations.d/${lower_ref_name}-PRRT-isomuts.csv
-  IN_MUTATIONS=payload/tables/isolate_mutations.d/${lower_ref_name}-IN-isomuts.csv
-  TARGET_MUTATIONS=payload/tables/isolate_mutations.d/${lower_ref_name}-isomuts.csv
 
   update_isolates "$lower_ref_name" PRRT
   update_isolates "$lower_ref_name" IN
 
+  # =================================
+  # Merge PRRT/IN `isolate_mutations`
+  # =================================
+  PRRT_MUTATIONS=payload/tables/isolate_mutations.d/${lower_ref_name}-PRRT-isomuts.csv
+  IN_MUTATIONS=payload/tables/isolate_mutations.d/${lower_ref_name}-IN-isomuts.csv
+  TARGET_MUTATIONS=payload/tables/isolate_mutations.d/${lower_ref_name}-isomuts.csv
   if [ -f $PRRT_MUTATIONS ]; then
     cp $PRRT_MUTATIONS $TARGET_MUTATIONS.tmp
     if [ -f $IN_MUTATIONS ]; then
@@ -190,7 +244,7 @@ tail -n +2 payload/tables/articles.csv | cut -d ',' -f 1 | while read ref_name; 
 
   if [ -f $TARGET_MUTATIONS.tmp ]; then
     if [ "$(wc -l $TARGET_MUTATIONS.tmp | awk '{print $1}')" -gt 1 ]; then
-      cat $TARGET_MUTATIONS.tmp | csvtk sort -k isolate_id:n,position:n,amino_acid:N > $TARGET_MUTATIONS
+      cat $TARGET_MUTATIONS.tmp | csvtk sort -k isolate_id:n,position:n,amino_acid:N | uniq > $TARGET_MUTATIONS
       addbom $TARGET_MUTATIONS
       echo "Update $TARGET_MUTATIONS"
     else
@@ -200,4 +254,33 @@ tail -n +2 payload/tables/articles.csv | cut -d ',' -f 1 | while read ref_name; 
     echo "Skip empty $TARGET_MUTATIONS"
   fi
   rm -f $PRRT_MUTATIONS $IN_MUTATIONS $TARGET_MUTATIONS.tmp
+
+  # ===============================================
+  # Merge PRRT/IN `isolate_excluded_surv_mutations`
+  # ===============================================
+  PRRT_EX_SDRMS=payload/tables/isolate_excluded_surv_mutations.d/${lower_ref_name}-PRRT-exsdrms.csv
+  IN_EX_SDRMS=payload/tables/isolate_excluded_surv_mutations.d/${lower_ref_name}-IN-exsdrms.csv
+  TARGET_EX_SDRMS=payload/tables/isolate_excluded_surv_mutations.d/${lower_ref_name}-exsdrms.csv
+  if [ -f $PRRT_EX_SDRMS ]; then
+    cp $PRRT_EX_SDRMS $TARGET_EX_SDRMS.tmp
+    if [ -f $IN_EX_SDRMS ]; then
+      tail -n +2 $IN_EX_SDRMS >> $TARGET_EX_SDRMS.tmp
+    fi
+  elif [ -f $IN_EX_SDRMS ]; then
+    cp $IN_EX_SDRMS $TARGET_EX_SDRMS.tmp
+  fi
+
+  if [ -f $TARGET_EX_SDRMS.tmp ]; then
+    if [ "$(wc -l $TARGET_EX_SDRMS.tmp | awk '{print $1}')" -gt 1 ]; then
+      cat $TARGET_EX_SDRMS.tmp | csvtk sort -k isolate_id:n,position:n,amino_acid:N |
+        csvtk cut -f isolate_id,mutation | uniq > $TARGET_EX_SDRMS
+      addbom $TARGET_EX_SDRMS
+      echo "Update $TARGET_EX_SDRMS"
+    else
+      echo "Skip empty $TARGET_EX_SDRMS"
+    fi
+  else
+    echo "Skip empty $TARGET_EX_SDRMS"
+  fi
+  rm -f $PRRT_EX_SDRMS $IN_EX_SDRMS $TARGET_EX_SDRMS.tmp
 done

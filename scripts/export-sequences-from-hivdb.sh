@@ -8,8 +8,8 @@ function separate_genes() {
   if [ -f "$1" ]; then
     file_prrt=$(dirname $1)/PRRT/$(basename $1)
     file_in=$(dirname $1)/IN/$(basename $1)
-    \grep -A1 ">.*PRRT" "$1" | \grep -v -F -- "--" > $file_prrt || true
-    \grep -A1 ">.*IN" "$1" | \grep -v -F -- "--" > $file_in || true
+    \grep -A1 ">.*PRRT$" "$1" | \grep -v -F -- "--" > $file_prrt || true
+    \grep -A1 ">.*IN$" "$1" | \grep -v -F -- "--" > $file_in || true
     if [ ! -s $file_prrt ]; then
       rm $file_prrt
     fi

@@ -55,6 +55,10 @@ ls payload/tables/isolate_mutations.d/*.csv | sort -h | while read filepath; do
     copy_csv $filepath isolate_mutations >> $TARGET_DIR/02_data_tables.sql
 done
 
+ls payload/tables/isolate_excluded_surv_mutations.d/*.csv | sort -h | while read filepath; do
+    copy_csv $filepath isolate_excluded_surv_mutations >> $TARGET_DIR/02_data_tables.sql
+done
+
 ls payload/tables/article_isolates.d/*.csv | sort -h | while read filepath; do
     copy_csv $filepath article_isolates >> $TARGET_DIR/02_data_tables.sql
 done

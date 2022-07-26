@@ -244,7 +244,7 @@ Table isolates as Iso {
     cpr_excluded
   }
 
-  Note: 'Table storing isolate metadata imported from HIVDB'
+  Note: 'Table storing isolate metadata imported from HIVDB and CPR'
 
 }
 
@@ -258,7 +258,18 @@ Table isolate_mutations as IsoMut {
     (isolate_id, position, amino_acid) [pk]
   }
 
-  Note: 'Table storing isolate mutations imported from HIVDB'
+  Note: 'Table storing isolate mutations imported from CPR'
+}
+
+Table isolate_excluded_surv_mutations as IsoExSDRMs {
+  isolate_id int [ref: > Iso.isolate_id, note: 'Isolate ID from HIVDB']
+  mutation varchar [ref: > SDRM.mutation]
+
+  indexes {
+    (isolate_id, mutation) [pk]
+  }
+
+  Note: 'Table storing SDRMs excluded by CPR'
 }
 
 Table article_isolates as RefIso {

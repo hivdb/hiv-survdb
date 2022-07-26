@@ -114,7 +114,7 @@ sync-to-s3: update-builder docker-envfile
    		hivdb/hiv-survdb-builder:latest \
 		scripts/sync-to-s3.sh
 
-payload/sequences: scripts/export-sequences-from-hivdb.sh docker-envfile
+payload/sequences: scripts/export-sequences-from-hivdb.sh docker-envfile .ssh-devnext2n-mysql.pid
 	@HIVDB_HOST=${LOIP} scripts/export-sequences-from-hivdb.sh payload/sequences
 
 devdb: update-builder network

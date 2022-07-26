@@ -41,6 +41,7 @@ tail -n +2 payload/tables/articles.csv | while IFS="," read -r ref_name ref_id e
   echo "Exporting $TARGET ..."
   pipenv run hivdbql export-fasta2 \
     --no-filter \
+    --rx naive \
     --refs $ref_id \
     --concat-option PRRT/IN \
     --trim-dot \

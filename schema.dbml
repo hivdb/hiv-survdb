@@ -323,7 +323,7 @@ Table dataset_summaries as DSum {
   num_sdrm_isolates int [not null, note: 'Number of isolates with SDRMs']
   num_sdrm_isolates_accepted int [not null, note: 'Number of isolates with SDRMs accepted by CPR']
   pcnt_sdrm_isolates float [not null, note: 'Percent of isolates with SDRMs']
-  pcnt_sdrm_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
+  pcnt_sdrm_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
     (ref_name, continent_name) [pk]
@@ -345,7 +345,7 @@ Table dataset_gene_summaries as DGeneSum {
   num_sdrm_isolates int [not null, note: 'Number of isolates with SDRMs']
   num_sdrm_isolates_accepted int [not null, note: 'Number of isolates with SDRMs accepted by CPR']
   pcnt_sdrm_isolates float [not null, note: 'Percent of isolates with SDRMs']
-  pcnt_sdrm_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
+  pcnt_sdrm_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
     (ref_name, continent_name, gene) [pk]
@@ -366,7 +366,7 @@ Table dataset_drug_class_summaries as DClassSum {
   num_isolates int [not null, note: 'Number of isolates with SDRMs']
   num_isolates_accepted int [not null, note: 'Number of isolates with SDRMs accepted by CPR']
   pcnt_isolates float [not null, note: 'Percent of isolates with SDRMs']
-  pcnt_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
+  pcnt_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
     (ref_name, continent_name, gene, drug_class) [pk]
@@ -389,7 +389,7 @@ Table dataset_subtype_summaries as DSubtypeSum {
   num_sdrm_isolates int [not null, note: 'Number of isolates with SDRMs']
   num_sdrm_isolates_accepted int [not null, note: 'Number of isolates with SDRMs accepted by CPR']
   pcnt_sdrm_isolates float [not null, note: 'Percent of isolates with SDRMs']
-  pcnt_sdrm_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
+  pcnt_sdrm_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
     (ref_name, continent_name, gene, subtype) [pk]
@@ -410,7 +410,7 @@ Table dataset_surv_mutation_summaries as DSDRM {
   num_isolates int [not null, note: 'Number of isolates']
   num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
   pcnt_isolates float [not null, note: 'Percent of isolates with SDRMs']
-  pcnt_isolates_accepted int [not null, note: 'Percent of isolates with SDRMs accepted by CPR']
+  pcnt_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
     (ref_name, continent_name, mutation) [pk]

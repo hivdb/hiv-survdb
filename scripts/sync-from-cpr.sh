@@ -72,6 +72,9 @@ for row in reader:
       aa = 'del'
     elif aa == '*':
       aa = 'stop'
+    elif aa == 'X':
+      # drop X
+      continue
     writer.writerow([
       row['patient_id'],
       row['gene'],

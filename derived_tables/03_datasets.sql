@@ -96,7 +96,12 @@ INSERT INTO dataset_summaries
             diso.isolate_id = isomut.isolate_id AND
             diso.gene = sdrm.gene AND
             isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid
+            isomut.amino_acid = sdrm.amino_acid AND
+            NOT EXISTS (
+              SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
+                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.mutation = sdrm.mutation
+            )
         )
     ) AS num_sdrm_isolates,
     (
@@ -110,18 +115,26 @@ INSERT INTO dataset_summaries
             diso.isolate_id = isomut.isolate_id AND
             diso.gene = sdrm.gene AND
             isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid
+            isomut.amino_acid = sdrm.amino_acid AND
+            NOT EXISTS (
+              SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
+                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.mutation = sdrm.mutation
+            )
         )
     ) AS num_sdrm_isolates_accepted,
     0 AS pcnt_sdrm_isolates,
-    0 AS pcnt_sdrm_isolates_accepted
+    NULL::FLOAT AS pcnt_sdrm_isolates_accepted
   FROM datasets d;
 
 UPDATE dataset_summaries
   SET pcnt_sdrm_isolates = 100.0 * num_sdrm_isolates / num_isolates;
 
 UPDATE dataset_summaries
-  SET pcnt_sdrm_isolates_accepted = 100.0 * num_sdrm_isolates_accepted / num_isolates_accepted;
+  SET pcnt_sdrm_isolates_accepted = CASE
+    WHEN num_isolates_accepted = 0 THEN NULL::FLOAT
+    ELSE 100.0 * num_sdrm_isolates_accepted / num_isolates_accepted
+  END;
 
 INSERT INTO dataset_gene_summaries
   SELECT DISTINCT
@@ -154,7 +167,12 @@ INSERT INTO dataset_gene_summaries
             diso.isolate_id = isomut.isolate_id AND
             g.gene = sdrm.gene AND
             isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid
+            isomut.amino_acid = sdrm.amino_acid AND
+            NOT EXISTS (
+              SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
+                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.mutation = sdrm.mutation
+            )
         )
     ) AS num_sdrm_isolates,
     (
@@ -169,11 +187,16 @@ INSERT INTO dataset_gene_summaries
             diso.isolate_id = isomut.isolate_id AND
             g.gene = sdrm.gene AND
             isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid
+            isomut.amino_acid = sdrm.amino_acid AND
+            NOT EXISTS (
+              SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
+                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.mutation = sdrm.mutation
+            )
         )
     ) AS num_sdrm_isolates_accepted,
     0 AS pcnt_sdrm_isolates,
-    0 AS pcnt_sdrm_isolates_accpeted
+    NULL::FLOAT AS pcnt_sdrm_isolates_accpeted
   FROM datasets d, (SELECT unnest(enum_range(NULL::gene_enum)) AS gene) g;
 
 DELETE FROM dataset_gene_summaries WHERE num_isolates = 0;
@@ -182,7 +205,10 @@ UPDATE dataset_gene_summaries dcSum
   SET pcnt_sdrm_isolates = 100.0 * num_sdrm_isolates / num_isolates;
 
 UPDATE dataset_gene_summaries dcSum
-  SET pcnt_sdrm_isolates = 100.0 * num_sdrm_isolates_accepted / num_isolates_accepted;
+  SET pcnt_sdrm_isolates_accepted = CASE
+    WHEN num_isolates_accepted = 0 THEN NULL::FLOAT
+    ELSE 100.0 * num_sdrm_isolates_accepted / num_isolates_accepted
+  END;
 
 INSERT INTO dataset_drug_class_summaries
   SELECT DISTINCT
@@ -201,7 +227,12 @@ INSERT INTO dataset_drug_class_summaries
             diso.isolate_id = isomut.isolate_id AND
             dc.drug_class = sdrm.drug_class AND
             isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid
+            isomut.amino_acid = sdrm.amino_acid AND
+            NOT EXISTS (
+              SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
+                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.mutation = sdrm.mutation
+            )
         )
     ) AS num_isolates,
     (
@@ -216,11 +247,16 @@ INSERT INTO dataset_drug_class_summaries
             diso.isolate_id = isomut.isolate_id AND
             dc.drug_class = sdrm.drug_class AND
             isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid
+            isomut.amino_acid = sdrm.amino_acid AND
+            NOT EXISTS (
+              SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
+                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.mutation = sdrm.mutation
+            )
         )
     ) AS num_isolates_accepted,
     0 AS pcnt_isolates,
-    0 AS pcnt_isolates_accpeted
+    NULL::FLOAT AS pcnt_isolates_accpeted
   FROM datasets d, drug_classes dc;
 
 DELETE FROM dataset_drug_class_summaries WHERE num_isolates = 0;
@@ -234,7 +270,10 @@ UPDATE dataset_drug_class_summaries dcSum
     gSum.gene = dcSum.gene;
 
 UPDATE dataset_drug_class_summaries dcSum
-  SET pcnt_isolates_accepted = 100.0 * dcSum.num_isolates_accepted / gSum.num_isolates_accepted
+  SET pcnt_isolates_accepted = CASE
+    WHEN gSum.num_isolates_accepted = 0 THEN NULL::FLOAT
+    ELSE 100.0 * dcSum.num_isolates_accepted / gSum.num_isolates_accepted
+  END
   FROM dataset_gene_summaries gSum
   WHERE
     gSum.ref_name = dcSum.ref_name AND
@@ -281,7 +320,12 @@ INSERT INTO dataset_subtype_summaries
             diso.isolate_id = isomut.isolate_id AND
             g.gene = sdrm.gene AND
             isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid
+            isomut.amino_acid = sdrm.amino_acid AND
+            NOT EXISTS (
+              SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
+                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.mutation = sdrm.mutation
+            )
         )
     ) AS num_sdrm_isolates,
     (
@@ -297,11 +341,16 @@ INSERT INTO dataset_subtype_summaries
             diso.isolate_id = isomut.isolate_id AND
             g.gene = sdrm.gene AND
             isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid
+            isomut.amino_acid = sdrm.amino_acid AND
+            NOT EXISTS (
+              SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
+                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.mutation = sdrm.mutation
+            )
         )
     ) AS num_sdrm_isolates_accepted,
     0 AS pcnt_sdrm_isolates,
-    0 AS pcnt_sdrm_isolates_accpeted
+    NULL::FLOAT AS pcnt_sdrm_isolates_accpeted
   FROM datasets d, subtypes s, (SELECT unnest(enum_range(NULL::gene_enum)) AS gene) g
   WHERE EXISTS (
     SELECT 1 FROM dataset_isolates diso
@@ -321,7 +370,10 @@ UPDATE dataset_subtype_summaries sSum
     gSum.gene = sSum.gene;
 
 UPDATE dataset_subtype_summaries sSum
-  SET pcnt_sdrm_isolates_accepted = 100.0 * sSum.num_sdrm_isolates_accepted / gSum.num_isolates_accepted
+  SET pcnt_sdrm_isolates_accepted = CASE
+    WHEN gSum.num_isolates_accepted = 0 THEN NULL::FLOAT
+    ELSE 100.0 * sSum.num_sdrm_isolates_accepted / gSum.num_isolates_accepted
+  END
   FROM dataset_gene_summaries gSum
   WHERE
     gSum.ref_name = sSum.ref_name AND
@@ -345,6 +397,11 @@ INSERT INTO dataset_surv_mutation_summaries
             diso.isolate_id = isomut.isolate_id AND
             isomut.position = m.position AND
             isomut.amino_acid = m.amino_acid
+        ) AND
+        NOT EXISTS (
+          SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
+            diso.isolate_id = exsdrm.isolate_id AND
+            exsdrm.mutation = m.mutation
         )
     ) AS num_isolates,
     (
@@ -359,10 +416,15 @@ INSERT INTO dataset_surv_mutation_summaries
             diso.isolate_id = isomut.isolate_id AND
             isomut.position = m.position AND
             isomut.amino_acid = m.amino_acid
+        ) AND
+        NOT EXISTS (
+          SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
+            diso.isolate_id = exsdrm.isolate_id AND
+            exsdrm.mutation = m.mutation
         )
     ) AS num_isolates_accepted,
     0 AS pcnt_isolates,
-    0 AS pcnt_isolates_accpeted
+    NULL::FLOAT AS pcnt_isolates_accpeted
   FROM datasets d, surv_mutations m
   WHERE EXISTS (
     SELECT 1 FROM dataset_isolates diso, isolate_mutations isomut
@@ -384,7 +446,10 @@ UPDATE dataset_surv_mutation_summaries mSum
     gSum.gene = mSum.gene;
 
 UPDATE dataset_surv_mutation_summaries mSum
-  SET pcnt_isolates_accepted = 100.0 * mSum.num_isolates_accepted / gSum.num_isolates_accepted
+  SET pcnt_isolates_accepted = CASE
+    WHEN gSum.num_isolates_accepted = 0 THEN NULL::FLOAT
+    ELSE 100.0 * mSum.num_isolates_accepted / gSum.num_isolates_accepted
+  END
   FROM dataset_gene_summaries gSum
   WHERE
     gSum.ref_name = mSum.ref_name AND

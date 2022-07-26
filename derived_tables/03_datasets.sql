@@ -29,7 +29,8 @@ FROM
   countries loc
 WHERE
   refiso.isolate_id = iso.isolate_id AND
-  iso.country_code = loc.country_code;
+  iso.country_code = loc.country_code AND
+  cpr_excluded IS NOT NULL;
 
 CREATE INDEX ON dataset_isolates (ref_name, continent_name);
 CREATE INDEX ON dataset_isolates (ref_name, continent_name, gene);

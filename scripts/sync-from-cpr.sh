@@ -15,50 +15,130 @@ function addbom() {
 }
 
 function read_cpr_qa() {
-  step1=$(mktemp)
-  step2=$(mktemp)
+  local tmpfile=$(mktemp)
 
-  xlsx2csv -n Analysis $1 > $step1
-  cat $step1 |
-    csvtk cut -f "sequenceID,pr.qa.problem,rt.qa.problem,in.qa.problem" |
+  cat $1 |
+    csvtk cut -f 'sequenceID,pr.qa.problem,rt.qa.problem,in.qa.problem' |
     csvtk mutate2 -n pr_cpr_excluded -e '$2 == "NA" ? "NULL" : ($2 == 0 ? "FALSE" : "TRUE")' |
     csvtk mutate2 -n rt_cpr_excluded -e '$3 == "NA" ? "NULL" : ($3 == 0 ? "FALSE" : "TRUE")' |
     csvtk mutate2 -n in_cpr_excluded -e '$4 == "NA" ? "NULL" : ($4 == 0 ? "FALSE" : "TRUE")' |
     csvtk mutate -f sequenceID -p 'PtID(\d+)\.' -n patient_id |
     csvtk mutate -f sequenceID -p '\.(\d{8})\.(?:PRRT|IN)' -n isolate_date |
-    csvtk replace -f isolate_date -p '(\d{4})(\d{2})(\d{2})' -r '$1-$2-$3' > $step2
-  cat $step2 |
+    csvtk replace -f isolate_date -p '(\d{4})(\d{2})(\d{2})' -r '$1-$2-$3' > $tmpfile
+  cat $tmpfile |
     csvtk cut -f patient_id,isolate_date,pr_cpr_excluded |
     csvtk filter2 -f '$pr_cpr_excluded != "NULL"' |
     csvtk mutate2 -n gene -e '"PR"' |
     csvtk rename -f 'pr_cpr_excluded' -n 'new_cpr_excluded'
-  cat $step2 |
+  cat $tmpfile |
     csvtk cut -f "patient_id,isolate_date,rt_cpr_excluded" |
     csvtk filter2 -f '$rt_cpr_excluded != "NULL"' |
     csvtk mutate2 -n gene -e '"RT"' |
     csvtk del-header
-  cat $step2 |
+  cat $tmpfile |
     csvtk cut -f "patient_id,isolate_date,in_cpr_excluded" |
     csvtk filter2 -f '$in_cpr_excluded != "NULL"' |
     csvtk mutate2 -n gene -e '"IN"' |
     csvtk del-header
+  rm $tmpfile
+}
+
+function unfold_mutations() {
+  python3 -c "
+import re
+import csv
+import sys
+
+reader = csv.DictReader(sys.stdin)
+writer = csv.writer(sys.stdout)
+
+writer.writerow(['patient_id', 'gene', 'isolate_date', 'mutation', 'position', 'amino_acid', 'is_mixture'])
+for row in reader:
+  try:
+    refaa, pos, aas = re.match(r'^([^\d])(\d+)([^\d]+)$', row['mutation']).groups()
+  except AttributeError:
+    raise AttributeError('Malformed mutation: {!r}'.format(row['mutation']))
+  if '_' in aas or aas in ('ins', 'Insertion'):
+    aas = 'i'
+  elif aas in ('del', 'Deletion', '-'):
+    aas = 'd'
+  is_mixture = len(aas) > 1
+  for aa in aas:
+    if refaa == aa:
+      continue
+    if aa == 'i':
+      aa = 'ins'
+    elif aa == 'd':
+      aa = 'del'
+    elif aa == '*':
+      aa = 'stop'
+    writer.writerow([
+      row['patient_id'],
+      row['gene'],
+      row['isolate_date'],
+      '{}{}{}'.format(refaa, pos, aa),
+      pos,
+      aa,
+      int(is_mixture)
+    ])
+"
+}
+
+function read_cpr_mutations() {
+  local step1=$(mktemp)
+  local step2=$(mktemp)
+
+  cat $1 |
+    csvtk cut -f 'sequenceID,pr.mutationlist,rt.mutationlist,in.mutationlist' |
+    csvtk mutate -f sequenceID -p 'PtID(\d+)\.' -n patient_id |
+    csvtk mutate -f sequenceID -p '\.(\d{8})\.(?:PRRT|IN)' -n isolate_date |
+    csvtk replace -f isolate_date -p '(\d{4})(\d{2})(\d{2})' -r '$1-$2-$3' > $step1
+  cat $step1 |
+    csvtk cut -f 'patient_id,isolate_date,pr.mutationlist' |
+    csvtk rename -f 'pr.mutationlist' -n 'mutation' |
+    csvtk filter2 -f '$mutation != "NA" && $mutation != "None" && $mutation != ""' |
+    csvtk mutate2 -n gene -e '"PR"' |
+    csvtk unfold -f 'mutation' -s ", " > $step2
+  cat $step1 |
+    csvtk cut -f 'patient_id,isolate_date,rt.mutationlist' |
+    csvtk rename -f 'rt.mutationlist' -n 'mutation' |
+    csvtk filter2 -f '$mutation != "NA" && $mutation != "None" && $mutation != ""' |
+    csvtk mutate2 -n gene -e '"RT"' |
+    csvtk unfold -f 'mutation' -s ", " |
+    csvtk del-header >> $step2
+  cat $step1 |
+    csvtk cut -f 'patient_id,isolate_date,in.mutationlist' |
+    csvtk rename -f 'in.mutationlist' -n 'mutation' |
+    csvtk filter2 -f '$mutation != "NA" && $mutation != "None" && $mutation != ""' |
+    csvtk mutate2 -n gene -e '"IN"' |
+    csvtk unfold -f 'mutation' -s ", " |
+    csvtk del-header >> $step2
+
+  cat $step2 | unfold_mutations
+
   rm $step1 $step2
 }
 
 function update_isolates() {
-  xlsx="payload/suppl-tables/cpr_results/$2/$1-seqs.xlsx"
+  local xlsx="payload/suppl-tables/cpr_results/$2/$1-seqs.xlsx"
+  local TARGET_ISOLATES=payload/tables/isolates.d/$1-iso.csv
 
   if [ -f "$xlsx" ]; then
-    TMP_CPR_QA=$(mktemp)
-    TMP_ISOLATES=$(mktemp)
-    TARGET_ISOLATES=payload/tables/isolates.d/$1-iso.csv
+    local TMP_CPR_ANALYSIS=$(mktemp)
 
     if [ ! -f $TARGET_ISOLATES ]; then
       echo "Skip $TARGET_ISOLATES"
       return
     fi
 
-    read_cpr_qa $xlsx > $TMP_CPR_QA
+    xlsx2csv -n Analysis $xlsx > $TMP_CPR_ANALYSIS
+
+    # =================
+    # Update `isolates`
+    # =================
+    local TMP_CPR_QA=$(mktemp)
+    local TMP_ISOLATES=$(mktemp)
+    read_cpr_qa $TMP_CPR_ANALYSIS > $TMP_CPR_QA
 
     if [ "$(wc -l $TMP_CPR_QA | awk '{print $1}')" -lt 2 ]; then
       echo "Skip $TARGET_ISOLATES since CPR is empty"
@@ -73,11 +153,51 @@ function update_isolates() {
     echo "Update $TARGET_ISOLATES ($2)"
     rm $TMP_CPR_QA
     rm $TMP_ISOLATES
+
+    # ==========================
+    # Update `isolate_mutations`
+    # ==========================
+    if [ -f $TARGET_ISOLATES ]; then
+      local TMP_CPR_MUTS=$(mktemp)
+      local TARGET_MUTATIONS=payload/tables/isolate_mutations.d/$1-$2-isomuts.csv
+      read_cpr_mutations $TMP_CPR_ANALYSIS > $TMP_CPR_MUTS
+      csvtk join $TMP_CPR_MUTS $TARGET_ISOLATES -f patient_id,gene,isolate_date --na NULL |
+        csvtk cut -f isolate_id,position,amino_acid,is_mixture > $TARGET_MUTATIONS
+      rm $TMP_CPR_MUTS
+    fi
   fi
 }
 
-cat payload/tables/articles.csv | cut -d ',' -f 1 | while read ref_name; do
+rm -f payload/tables/isolate_mutations.d/*.csv
+
+tail -n +2 payload/tables/articles.csv | cut -d ',' -f 1 | while read ref_name; do
   lower_ref_name=$(refname_for_file $ref_name)
+  PRRT_MUTATIONS=payload/tables/isolate_mutations.d/${lower_ref_name}-PRRT-isomuts.csv
+  IN_MUTATIONS=payload/tables/isolate_mutations.d/${lower_ref_name}-IN-isomuts.csv
+  TARGET_MUTATIONS=payload/tables/isolate_mutations.d/${lower_ref_name}-isomuts.csv
+
   update_isolates "$lower_ref_name" PRRT
   update_isolates "$lower_ref_name" IN
+
+  if [ -f $PRRT_MUTATIONS ]; then
+    cp $PRRT_MUTATIONS $TARGET_MUTATIONS.tmp
+    if [ -f $IN_MUTATIONS ]; then
+      tail -n +2 $IN_MUTATIONS >> $TARGET_MUTATIONS.tmp
+    fi
+  elif [ -f $IN_MUTATIONS ]; then
+    cp $IN_MUTATIONS $TARGET_MUTATIONS.tmp
+  fi
+
+  if [ -f $TARGET_MUTATIONS.tmp ]; then
+    if [ "$(wc -l $TARGET_MUTATIONS.tmp | awk '{print $1}')" -gt 1 ]; then
+      cat $TARGET_MUTATIONS.tmp | csvtk sort -k isolate_id:n,position:n,amino_acid:N > $TARGET_MUTATIONS
+      addbom $TARGET_MUTATIONS
+      echo "Update $TARGET_MUTATIONS"
+    else
+      echo "Skip empty $TARGET_MUTATIONS"
+    fi
+  else
+    echo "Skip empty $TARGET_MUTATIONS"
+  fi
+  rm -f $PRRT_MUTATIONS $IN_MUTATIONS $TARGET_MUTATIONS.tmp
 done

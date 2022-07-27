@@ -316,6 +316,7 @@ Table dataset_summaries as DSum {
   isolate_year_end int [not null, note: 'Isolate year range end']
   isolate_sources varchar [not null, note: 'comma separated distinct isolate sources']
   isolate_seq_methods varchar [not null, note: 'comma separated distinct sequence methods']
+  isolate_country_codes varchar [not null, note: 'comma separated distinct country codes']
 
   num_patients int [not null, note: 'Number of patients filtered by RefNote.action']
   num_isolates int [not null, note: 'Number of isolates']

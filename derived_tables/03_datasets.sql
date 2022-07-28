@@ -1,12 +1,11 @@
 SELECT
-  refiso.ref_name,
+  ref_name,
   loc.continent_name,
   iso.country_code,
-  iso.isolate_id,
+  isolate_name,
   patient_id,
   gene,
   EXTRACT(YEAR FROM isolate_date) AS year,
-  patient_id::text || '$$' || isolate_date::text AS patient_ts,
   subtype,
   source,
   seq_method,
@@ -14,12 +13,9 @@ SELECT
 INTO TABLE dataset_isolates
 FROM
   isolates iso,
-  article_isolates refiso,
   countries loc
 WHERE
-  refiso.isolate_id = iso.isolate_id AND
-  iso.country_code = loc.country_code AND
-  cpr_excluded IS NOT NULL;
+  iso.country_code = loc.country_code;
 
 SELECT
   ref_name,
@@ -31,7 +27,7 @@ FROM article_annotations
 CREATE INDEX ON dataset_isolates (ref_name, continent_name);
 CREATE INDEX ON dataset_isolates (ref_name, continent_name, gene);
 CREATE INDEX ON dataset_isolates (subtype);
-CREATE INDEX ON dataset_isolates (patient_ts);
+CREATE INDEX ON dataset_isolates (isolate_name);
 
 UPDATE dataset_isolates iso
   SET continent_name = set_to.continent_name
@@ -89,57 +85,51 @@ INSERT INTO dataset_summaries
       ) AS t2
     ) AS isolate_country_codes,
     (
-      SELECT COUNT(DISTINCT patient_id) FROM dataset_isolates diso
-      WHERE
-        diso.ref_name = d.ref_name AND
-        diso.continent_name = d.continent_name
-    ) AS num_patients,
-    (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name
     ) AS num_isolates,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
         cpr_excluded IS NOT TRUE
     ) AS num_isolates_accepted,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
         EXISTS (
           SELECT 1 FROM isolate_mutations isomut, surv_mutations sdrm WHERE
-            diso.isolate_id = isomut.isolate_id AND
-            diso.gene = sdrm.gene AND
-            isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid AND
+            diso.ref_name = isomut.ref_name AND
+            diso.isolate_name = isomut.isolate_name AND
+            isomut.mutation = sdrm.mutation AND
             NOT EXISTS (
               SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
-                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.ref_name = isomut.ref_name AND
+                exsdrm.isolate_name = isomut.isolate_name AND
                 exsdrm.mutation = sdrm.mutation
             )
         )
     ) AS num_sdrm_isolates,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
         cpr_excluded IS NOT TRUE AND
         EXISTS (
           SELECT 1 FROM isolate_mutations isomut, surv_mutations sdrm WHERE
-            diso.isolate_id = isomut.isolate_id AND
-            diso.gene = sdrm.gene AND
-            isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid AND
+            diso.ref_name = isomut.ref_name AND
+            diso.isolate_name = isomut.isolate_name AND
+            isomut.mutation = sdrm.mutation AND
             NOT EXISTS (
               SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
-                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.ref_name = isomut.ref_name AND
+                exsdrm.isolate_name = isomut.isolate_name AND
                 exsdrm.mutation = sdrm.mutation
             )
         )
@@ -163,14 +153,14 @@ INSERT INTO dataset_gene_summaries
     d.continent_name,
     g.gene,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
         diso.gene = g.gene
     ) AS num_isolates,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
@@ -178,26 +168,26 @@ INSERT INTO dataset_gene_summaries
         cpr_excluded IS NOT TRUE
     ) AS num_isolates_accepted,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
         diso.gene = g.gene AND
         EXISTS (
           SELECT 1 FROM isolate_mutations isomut, surv_mutations sdrm WHERE
-            diso.isolate_id = isomut.isolate_id AND
-            g.gene = sdrm.gene AND
-            isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid AND
+            diso.ref_name = isomut.ref_name AND
+            diso.isolate_name = isomut.isolate_name AND
+            isomut.mutation = sdrm.mutation AND
             NOT EXISTS (
               SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
-                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.ref_name = isomut.ref_name AND
+                exsdrm.isolate_name = isomut.isolate_name AND
                 exsdrm.mutation = sdrm.mutation
             )
         )
     ) AS num_sdrm_isolates,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
@@ -205,13 +195,13 @@ INSERT INTO dataset_gene_summaries
         cpr_excluded IS NOT TRUE AND
         EXISTS (
           SELECT 1 FROM isolate_mutations isomut, surv_mutations sdrm WHERE
-            diso.isolate_id = isomut.isolate_id AND
-            g.gene = sdrm.gene AND
-            isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid AND
+            diso.ref_name = isomut.ref_name AND
+            diso.isolate_name = isomut.isolate_name AND
+            isomut.mutation = sdrm.mutation AND
             NOT EXISTS (
               SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
-                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.ref_name = isomut.ref_name AND
+                exsdrm.isolate_name = isomut.isolate_name AND
                 exsdrm.mutation = sdrm.mutation
             )
         )
@@ -238,26 +228,27 @@ INSERT INTO dataset_drug_class_summaries
     dc.gene,
     dc.drug_class,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
         diso.gene = dc.gene AND
         EXISTS (
           SELECT 1 FROM isolate_mutations isomut, surv_mutations sdrm WHERE
-            diso.isolate_id = isomut.isolate_id AND
+            diso.ref_name = isomut.ref_name AND
+            diso.isolate_name = isomut.isolate_name AND
             dc.drug_class = sdrm.drug_class AND
-            isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid AND
+            isomut.mutation = sdrm.mutation AND
             NOT EXISTS (
               SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
-                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.ref_name = isomut.ref_name AND
+                exsdrm.isolate_name = isomut.isolate_name AND
                 exsdrm.mutation = sdrm.mutation
             )
         )
     ) AS num_isolates,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
@@ -265,13 +256,14 @@ INSERT INTO dataset_drug_class_summaries
         cpr_excluded IS NOT TRUE AND
         EXISTS (
           SELECT 1 FROM isolate_mutations isomut, surv_mutations sdrm WHERE
-            diso.isolate_id = isomut.isolate_id AND
+            diso.ref_name = isomut.ref_name AND
+            diso.isolate_name = isomut.isolate_name AND
             dc.drug_class = sdrm.drug_class AND
-            isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid AND
+            isomut.mutation = sdrm.mutation AND
             NOT EXISTS (
               SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
-                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.ref_name = isomut.ref_name AND
+                exsdrm.isolate_name = isomut.isolate_name AND
                 exsdrm.mutation = sdrm.mutation
             )
         )
@@ -313,7 +305,7 @@ INSERT INTO dataset_subtype_summaries
     g.gene,
     s.subtype,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
@@ -321,7 +313,7 @@ INSERT INTO dataset_subtype_summaries
         diso.subtype = s.subtype
     ) AS num_isolates,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
@@ -330,7 +322,7 @@ INSERT INTO dataset_subtype_summaries
         cpr_excluded IS NOT TRUE
     ) AS num_isolates_accepted,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
@@ -338,19 +330,19 @@ INSERT INTO dataset_subtype_summaries
         diso.subtype = s.subtype AND
         EXISTS (
           SELECT 1 FROM isolate_mutations isomut, surv_mutations sdrm WHERE
-            diso.isolate_id = isomut.isolate_id AND
-            g.gene = sdrm.gene AND
-            isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid AND
+            diso.ref_name = isomut.ref_name AND
+            diso.isolate_name = isomut.isolate_name AND
+            isomut.mutation = sdrm.mutation AND
             NOT EXISTS (
               SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
-                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.ref_name = isomut.ref_name AND
+                exsdrm.isolate_name = isomut.isolate_name AND
                 exsdrm.mutation = sdrm.mutation
             )
         )
     ) AS num_sdrm_isolates,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
@@ -359,13 +351,13 @@ INSERT INTO dataset_subtype_summaries
         cpr_excluded IS NOT TRUE AND
         EXISTS (
           SELECT 1 FROM isolate_mutations isomut, surv_mutations sdrm WHERE
-            diso.isolate_id = isomut.isolate_id AND
-            g.gene = sdrm.gene AND
-            isomut.position = sdrm.position AND
-            isomut.amino_acid = sdrm.amino_acid AND
+            diso.ref_name = isomut.ref_name AND
+            diso.isolate_name = isomut.isolate_name AND
+            isomut.mutation = sdrm.mutation AND
             NOT EXISTS (
               SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
-                exsdrm.isolate_id = isomut.isolate_id AND
+                exsdrm.ref_name = isomut.ref_name AND
+                exsdrm.isolate_name = isomut.isolate_name AND
                 exsdrm.mutation = sdrm.mutation
             )
         )
@@ -408,25 +400,26 @@ INSERT INTO dataset_surv_mutation_summaries
     m.gene,
     m.mutation,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
         diso.gene = m.gene AND
         EXISTS (
           SELECT 1 FROM isolate_mutations isomut WHERE
-            diso.isolate_id = isomut.isolate_id AND
-            isomut.position = m.position AND
-            isomut.amino_acid = m.amino_acid
+            diso.ref_name = isomut.ref_name AND
+            diso.isolate_name = isomut.isolate_name AND
+            isomut.mutation = m.mutation
         ) AND
         NOT EXISTS (
           SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
-            diso.isolate_id = exsdrm.isolate_id AND
+            diso.ref_name = exsdrm.ref_name AND
+            diso.isolate_name = exsdrm.isolate_name AND
             exsdrm.mutation = m.mutation
         )
     ) AS num_isolates,
     (
-      SELECT COUNT(DISTINCT patient_ts) FROM dataset_isolates diso
+      SELECT COUNT(DISTINCT isolate_name) FROM dataset_isolates diso
       WHERE
         diso.ref_name = d.ref_name AND
         diso.continent_name = d.continent_name AND
@@ -434,13 +427,14 @@ INSERT INTO dataset_surv_mutation_summaries
         cpr_excluded IS NOT TRUE AND
         EXISTS (
           SELECT 1 FROM isolate_mutations isomut WHERE
-            diso.isolate_id = isomut.isolate_id AND
-            isomut.position = m.position AND
-            isomut.amino_acid = m.amino_acid
+            diso.ref_name = isomut.ref_name AND
+            diso.isolate_name = isomut.isolate_name AND
+            isomut.mutation = m.mutation
         ) AND
         NOT EXISTS (
           SELECT 1 FROM isolate_excluded_surv_mutations exsdrm WHERE
-            diso.isolate_id = exsdrm.isolate_id AND
+            diso.ref_name = exsdrm.ref_name AND
+            diso.isolate_name = exsdrm.isolate_name AND
             exsdrm.mutation = m.mutation
         )
     ) AS num_isolates_accepted,
@@ -452,10 +446,9 @@ INSERT INTO dataset_surv_mutation_summaries
     WHERE
       diso.ref_name = d.ref_name AND
       diso.continent_name = d.continent_name AND
-      diso.gene = m.gene AND
-      diso.isolate_id = isomut.isolate_id AND
-      isomut.position = m.position AND
-      isomut.amino_acid = m.amino_acid
+      diso.ref_name = isomut.ref_name AND
+      diso.isolate_name = isomut.isolate_name AND
+      isomut.mutation = m.mutation
   );
 
 UPDATE dataset_surv_mutation_summaries mSum

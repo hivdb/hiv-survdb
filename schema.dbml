@@ -97,27 +97,17 @@ Enum article_status_enum {
 }
 
 Table article_annotations as RefNote {
-  ref_name varchar [pk, ref: > Ref.ref_name]
+  ref_name varchar [ref: > Ref.ref_name]
+  original_continent_name continent_enum
   status article_status_enum [not null]
   annotation varchar [note: 'Text annotation for this article']
   action varchar [note: 'Machine readable filter/edit action when summarizing isolates']
 
-  Note: 'Table storing text annotation for articles'
-}
-
-Enum cpr_test_code_enum {
-  PRRT
-  IN
-}
-
-Table article_cpr_urls as CPR {
-  ref_name varchar [ref: > Ref.ref_name]
-  test_code cpr_test_code_enum
-  url varchar [unique, not null]
-
   indexes {
-    (ref_name, test_code) [pk]
+    (ref_name, original_continent_name)
   }
+
+  Note: 'Table storing text annotation for articles'
 }
 
 Enum gene_enum {
@@ -218,7 +208,8 @@ Enum isolate_seq_method_enum {
 }
 
 Table isolates as Iso {
-  isolate_id int [pk, note: 'Isolate ID from HIVDB']
+  ref_name varchar [ref: > Ref.ref_name]
+  isolate_name varchar [note: 'Isolate name (PseudoName from HIVDB)']
   patient_id int [not null, note: 'PtID from HIVDB']
   gene gene_enum [not null, note: 'Gene']
   isolate_date date [not null]
@@ -239,7 +230,8 @@ Table isolates as Iso {
   date_entered date [not null]
 
   indexes {
-    (isolate_id, patient_id, gene, isolate_date) [unique]
+    (ref_name, isolate_name, gene) [pk]
+    (patient_id, gene, isolate_date) [unique]
     genbank_accn
     cpr_excluded
   }
@@ -249,44 +241,49 @@ Table isolates as Iso {
 }
 
 Table isolate_mutations as IsoMut {
-  isolate_id int [ref: > Iso.isolate_id, note: 'Isolate ID from HIVDB']
+  ref_name varchar
+  isolate_name varchar [note: 'Isolate name (PseudoName from HIVDB)']
+  gene gene_enum [not null, note: 'Gene']
+  mutation varchar [not null]
   position int [note: 'AA Position in gene']
   amino_acid amino_acid_enum [note: 'Mutation amino acid']
   is_mixture boolean [note: 'If this position has mixtures']
 
   indexes {
-    (isolate_id, position, amino_acid) [pk]
+    (ref_name, isolate_name, gene, position, amino_acid) [pk]
+    (ref_name, isolate_name, gene, mutation) [unique]
+    position
+    amino_acid
   }
 
   Note: 'Table storing isolate mutations imported from CPR'
 }
 
+Ref: IsoMut.(ref_name, isolate_name, gene) > Iso.(ref_name, isolate_name, gene) 
+
 Table isolate_excluded_surv_mutations as IsoExSDRMs {
-  isolate_id int [ref: > Iso.isolate_id, note: 'Isolate ID from HIVDB']
+  ref_name varchar
+  isolate_name varchar [note: 'Isolate name (PseudoName from HIVDB)']
+  gene gene_enum [not null, note: 'Gene']
   mutation varchar [ref: > SDRM.mutation]
+  position int [note: 'AA Position in gene']
+  amino_acid amino_acid_enum [note: 'Mutation amino acid']
 
   indexes {
-    (isolate_id, mutation) [pk]
+    (ref_name, isolate_name, gene, position, amino_acid) [pk]
+    (ref_name, isolate_name, gene, mutation) [unique]
+    position
+    amino_acid
   }
 
   Note: 'Table storing SDRMs excluded by CPR'
 }
+Ref: IsoExSDRMs.(ref_name, isolate_name, gene) > Iso.(ref_name, isolate_name, gene)
 
-Table article_isolates as RefIso {
-  ref_name varchar [ref: > Ref.ref_name]
-  isolate_id int [ref: > Iso.isolate_id, not null, note: 'Isolate ID from HIVDB']
-
-  indexes {
-    (ref_name, isolate_id) [pk]
-  }
-
-  Note: 'Many-to-many table storing relationship between articles and isolates'
-}
 
 Table article_summaries as RefSum {
   ref_name varchar [pk, ref: > Ref.ref_name]
 
-  num_patients int [not null, note: 'Number of patients filtered by RefNote.action']
   num_isolates int [not null, note: 'Number of isolates']
 
   Note: 'Derived article summary table'
@@ -308,6 +305,16 @@ Table datasets as D {
   Note: 'Derived dataset (defined as article + contient) table'
 }
 
+Table dataset_cpr_urls as CPR {
+  ref_name varchar [ref: > Ref.ref_name]
+  continent_name continent_enum
+  url varchar [pk]
+
+  indexes {
+    (ref_name, continent_name)
+  }
+}
+
 Table dataset_summaries as DSum {
   ref_name varchar
   continent_name continent_enum
@@ -318,7 +325,6 @@ Table dataset_summaries as DSum {
   isolate_seq_methods varchar [not null, note: 'comma separated distinct sequence methods']
   isolate_country_codes varchar [not null, note: 'comma separated distinct country codes']
 
-  num_patients int [not null, note: 'Number of patients filtered by RefNote.action']
   num_isolates int [not null, note: 'Number of isolates']
   num_isolates_accepted int [not null, note: 'Number of isolates accepted by CPR']
   num_sdrm_isolates int [not null, note: 'Number of isolates with SDRMs']
@@ -351,6 +357,7 @@ Table dataset_gene_summaries as DGeneSum {
   indexes {
     (ref_name, continent_name, gene) [pk]
     continent_name
+    gene
   }
 
   Note: 'Derived dataset summary by gene table'
@@ -372,6 +379,8 @@ Table dataset_drug_class_summaries as DClassSum {
   indexes {
     (ref_name, continent_name, gene, drug_class) [pk]
     continent_name
+    gene
+    drug_class
   }
 
   Note: 'Derived dataset summary by drug class table'
@@ -395,6 +404,8 @@ Table dataset_subtype_summaries as DSubtypeSum {
   indexes {
     (ref_name, continent_name, gene, subtype) [pk]
     continent_name
+    gene
+    subtype
   }
 
   Note: 'Derived dataset summary by subtype table'
@@ -414,8 +425,10 @@ Table dataset_surv_mutation_summaries as DSDRM {
   pcnt_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
-    (ref_name, continent_name, mutation) [pk]
+    (ref_name, continent_name, gene, mutation) [pk]
     continent_name
+    gene
+    mutation
   }
 
   Note: 'Derived table storing the occurrence of SDRMs per articles'

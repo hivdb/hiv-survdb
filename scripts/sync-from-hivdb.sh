@@ -8,10 +8,6 @@ function refname_for_file() {
   echo "${1,,}" | sed "s/[[:space:]]\+/-/g" | sed "s/['\"]//g"
 }
 
-function sql_escape() {
-  echo "$1" | sed "s/'/''/g"
-}
-
 function tab2csv() {
 	python3 -c "
 import csv
@@ -21,6 +17,10 @@ reader = csv.reader(sys.stdin, delimiter='\t')
 writer = csv.writer(sys.stdout)
 writer.writerows(reader)
 "
+}
+
+function test_csv_empty() {
+  test "$(wc -l $1 | awk '{print $1}')" -lt 2
 }
 
 function addbom() {
@@ -106,93 +106,36 @@ rm $TMP_ARTICLES.2
 addbom $TARGET_ARTICLES
 echo "Create $TARGET_ARTICLES"
 
-# ===========================
-# Table `article_annotations`
-# ===========================
+# # ===========================
+# # Table `article_annotations`
+# # ===========================
+# 
+# TMP_ANNOTS=/tmp/ref_annots.csv
+# TARGET_ANNOTS=payload/tables/article_annotations.csv
+# 
+# query > $TMP_ANNOTS.1 <<EOF
+#   SELECT DISTINCT
+#     SR.RefID as ref_id,
+#     SR.Status as status,
+#     SR.Study_Notes as annotation,
+#     CASE WHEN SR.Action LIKE 'Use_Only_From_Region:%' THEN 'NULL' ELSE SR.Action END as action
+#   FROM tblSurRefs SR
+#   WHERE
+#     SR.RefID NOT IN (1154)
+# EOF
+# 
+# cat $TARGET_ARTICLES |
+#   csvtk cut -f 'ref_name,ref_id' > $TMP_ANNOTS.2
+# 
+# csvtk join $TMP_ANNOTS.1 $TMP_ANNOTS.2 -f ref_id --na NULL |
+#   csvtk cut -f 'ref_name,status,annotation,action' |
+#   csvtk sort -k ref_name > $TARGET_ANNOTS
+# rm $TMP_ANNOTS.1
+# rm $TMP_ANNOTS.2
+# 
+# addbom $TARGET_ANNOTS
+# echo "Create $TARGET_ANNOTS"
 
-TMP_ANNOTS=/tmp/ref_annots.csv
-TARGET_ANNOTS=payload/tables/article_annotations.csv
-
-query > $TMP_ANNOTS.1 <<EOF
-  SELECT DISTINCT
-    SR.RefID as ref_id,
-    SR.Status as status,
-    SR.Study_Notes as annotation,
-    CASE WHEN SR.Action LIKE 'Use_Only_From_Region:%' THEN 'NULL' ELSE SR.Action END as action
-  FROM tblSurRefs SR
-  WHERE
-    SR.RefID NOT IN (1154)
-EOF
-
-cat $TARGET_ARTICLES |
-  csvtk cut -f 'ref_name,ref_id' > $TMP_ANNOTS.2
-
-csvtk join $TMP_ANNOTS.1 $TMP_ANNOTS.2 -f ref_id --na NULL |
-  csvtk cut -f 'ref_name,status,annotation,action' |
-  csvtk sort -k ref_name > $TARGET_ANNOTS
-rm $TMP_ANNOTS.1
-rm $TMP_ANNOTS.2
-
-addbom $TARGET_ANNOTS
-echo "Create $TARGET_ANNOTS"
-
-
-# ========================
-# Table `article_isolates`
-# ========================
-
-TMP_REFISO_DIR=/tmp/refiso
-TARGET_REFISO_DIR=payload/tables/article_isolates.d
-rm -rf $TARGET_REFISO_DIR
-mkdir -p $TMP_REFISO_DIR
-mkdir -p $TARGET_REFISO_DIR
-
-cat $TARGET_ARTICLES |
-  csvtk cut -f ref_name,ref_id |
-  csvtk del-header |
-  csvtk csv2tab | while IFS=$'\t' read -r ref_name ref_id;
-do
-  TMP_REFISO="${TMP_REFISO_DIR}/$(refname_for_file "$ref_name")-refiso.csv"
-  TARGET_REFISO="${TARGET_REFISO_DIR}/$(refname_for_file "$ref_name")-refiso.csv"
-  if [ -f $TARGET_REFISO ]; then
-    echo "Conflict refname_for_file: $(refname_for_file "$ref_name")" >&2
-    exit 1
-  fi
-  
-  query > $TMP_REFISO <<EOF
-    SELECT DISTINCT
-      '$(sql_escape "${ref_name}")' as ref_name,
-      RL.IsolateID as isolate_id
-    FROM tblRefLink RL
-    WHERE
-      RL.RefID = ${ref_id} AND
-      -- NOT EXISTS (
-      --   SELECT 1 FROM tblIsolateFilters IsoF
-      --   WHERE
-      --     RL.IsolateID = IsoF.IsolateID AND
-      --     IsoF.Filter = 'QA'
-      -- ) AND
-      EXISTS (
-        SELECT 1 FROM tblIsolates I
-        WHERE
-          RL.IsolateID = I.IsolateID AND
-          I.Type = 'Clinical'
-      ) AND
-      NOT EXISTS (
-        SELECT 1 FROM tblSequences S
-        WHERE
-        RL.IsolateID = S.IsolateID AND
-        S.SeqType != 'Sequence'
-      )
-EOF
-  
-  addbom $TMP_REFISO
-  mv $TMP_REFISO $TARGET_REFISO
-  echo "Create $TARGET_REFISO"
-
-done
-
-rm -rf $TMP_REFISO_DIR
 
 # ================
 # Table `isolates`
@@ -200,6 +143,13 @@ rm -rf $TMP_REFISO_DIR
 
 TMP_ISO_DIR=/tmp/isolates
 TARGET_ISO_DIR=payload/tables/isolates.d
+GENE_ORDER=$(mktemp)
+
+cat > $GENE_ORDER <<EOF
+PR
+RT
+IN
+EOF
 
 rm -rf $TARGET_ISO_DIR
 mkdir -p $TMP_ISO_DIR
@@ -215,61 +165,40 @@ do
   
   query > $TMP_ISO.1 <<EOF
     SELECT
-      RL.IsolateID as isolate_id,
+      '${ref_name//\'/\'\'}' as ref_name,
+      P.PseudoName as isolate_name,
       I.PtID as patient_id,
       I.Gene as gene,
       I.IsolateDate as isolate_date,
-      S.Subtype as subtype,
+      ST.Subtype as subtype,
       CI.Source as source,
       CI.SeqMethod as seq_method,
       P.Region as country_name,
-      GROUP_CONCAT(Seq.AccessionID SEPARATOR ',') as genbank_accn,
+      GROUP_CONCAT(DISTINCT Seq.AccessionID SEPARATOR ',') as genbank_accn,
       NULL as cpr_excluded,
       I.DateEntered as date_entered
-    FROM tblRefLink RL, tblIsolates I, tblSubtypes S, tblClinIsolates CI, tblPatients P, tblSequences Seq
+    FROM tblRefLink RL
+      JOIN tblIsolates I ON RL.IsolateID=I.IsolateID
+      JOIN tblClinIsolates CI ON RL.IsolateID=CI.IsolateID
+      JOIN tblSequences Seq ON RL.IsolateID=Seq.IsolateID
+      JOIN tblSpecies SP ON RL.IsolateID=SP.IsolateID
+      JOIN tblSubtypes ST ON RL.IsolateID=ST.IsolateID
+      JOIN tblPatients P ON I.PtID = P.PtID
     WHERE
-      RL.RefID = ${ref_id} AND
-      -- NOT EXISTS (
-      --   SELECT 1 FROM tblIsolateFilters IsoF
-      --   WHERE
-      --     RL.IsolateID = IsoF.IsolateID AND
-      --     IsoF.Filter = 'QA'
-      -- ) AND
-      NOT EXISTS (
-        SELECT 1 FROM tblSequences S
-        WHERE
-        RL.IsolateID = S.IsolateID AND
-        S.SeqType != 'Sequence'
-      ) AND
-      RL.IsolateID = I.IsolateID AND
-      RL.IsolateID = S.IsolateID AND
-      RL.IsolateID = CI.IsolateID AND
-      RL.IsolateID = Seq.IsolateID AND
-      (
-        RL.Priority = 1 OR
-        NOT EXISTS (
-          SELECT 1 FROM tblSurRefs SR, tblRefLink RL2
-          WHERE
-            SR.RefID != ${ref_id} AND
-            SR.RefID = RL2.RefID AND
-            RL2.IsolateID = RL.IsolateID AND
-            RL2.Priority = 1
-        )
-      ) AND
-      I.Type = 'Clinical' AND
-      I.PtID = P.PtID
+      RL.RefID = ${ref_id}
     GROUP BY
-      RL.IsolateID,
+      P.PseudoName,
       I.PtID,
       I.Gene,
       I.IsolateDate,
-      S.Subtype,
+      ST.Subtype,
       CI.Source,
       CI.SeqMethod,
       P.Region,
       I.DateEntered
     ORDER BY
-      RL.IsolateID
+      P.PseudoName,
+      I.IsolateDate
 EOF
 
   if [ ! -s $TMP_ISO.1 ]; then
@@ -278,117 +207,19 @@ EOF
   fi
 
   csvtk join --left-join $TMP_ISO.1 payload/suppl-tables/country_names_and_codes.csv -f country_name --na NULL |
-    csvtk cut -f isolate_id,patient_id,gene,isolate_date,subtype,source,seq_method,country_code,genbank_accn,cpr_excluded,date_entered > $TMP_ISO.2
+    csvtk cut -f ref_name,isolate_name,patient_id,gene,isolate_date,subtype,source,seq_method,country_code,genbank_accn,cpr_excluded,date_entered > $TMP_ISO.2
+
+  csvtk cut -f isolate_name $TMP_ISO.2 | csvtk del-header | sort --version-sort > $TMP_ISO.3
+  csvtk sort -k isolate_name:u,gene:u -L isolate_name:$TMP_ISO.3 -L gene:$GENE_ORDER $TMP_ISO.2 > $TMP_ISO.4
   
-  addbom $TMP_ISO.2
-  mv $TMP_ISO.2 $TARGET_ISO
-  echo "Create $TARGET_ISO"
+  if test_csv_empty $TMP_ISO.4; then
+    echo "Skip empty $TARGET_ISO"
+  else
+    addbom $TMP_ISO.4
+    mv $TMP_ISO.4 $TARGET_ISO
+    echo "Create $TARGET_ISO"
+  fi
 
 done
 
 rm -rf $TMP_ISO_DIR
-
-# =========================
-# Table `isolate_mutations`
-# =========================
-
-TMP_ISOMUT_DIR=/tmp/isomuts
-TARGET_ISOMUT_DIR=payload/tables/isolate_mutations.d
-
-rm -rf $TARGET_ISOMUT_DIR
-mkdir -p $TMP_ISOMUT_DIR
-mkdir -p $TARGET_ISOMUT_DIR
-
-cat $TARGET_ARTICLES |
-  csvtk cut -f ref_name,ref_id |
-  csvtk del-header |
-  csvtk csv2tab | while IFS=$'\t' read -r ref_name ref_id;
-do
-  TMP_ISOMUT="${TMP_ISOMUT_DIR}/$(refname_for_file "$ref_name")-isomuts.csv"
-  TARGET_ISOMUT="${TARGET_ISOMUT_DIR}/$(refname_for_file "$ref_name")-isomuts.csv"
-  
-  query > $TMP_ISOMUT.1 <<EOF
-    SELECT
-      DISTINCT
-      RL.IsolateID as isolate_id,
-      M.CodonPos as position,
-      CASE
-        WHEN M.Insertion = 'Yes' THEN 'ins'
-        WHEN M.MutAA = '~' THEN 'del'
-        WHEN M.MutAA = '*' THEN 'stop'
-        ELSE M.MutAA
-      END as amino_acid,
-      M.MutText as mut_text,
-      M.Mixture = 'Yes' as is_mixture
-    FROM tblRefLink RL, tblSequences S, _Mutations M
-    WHERE
-      RL.RefID = ${ref_id} AND
-      -- NOT EXISTS (
-      --   SELECT 1 FROM tblIsolateFilters IsoF
-      --   WHERE
-      --     RL.IsolateID = IsoF.IsolateID AND
-      --     IsoF.Filter = 'QA'
-      -- ) AND
-      NOT EXISTS (
-        SELECT 1 FROM tblSequences S
-        WHERE
-        RL.IsolateID = S.IsolateID AND
-        S.SeqType != 'Sequence'
-      ) AND
-      RL.IsolateID = S.IsolateID AND
-      (
-        RL.Priority = 1 OR
-        NOT EXISTS (
-          SELECT 1 FROM tblSurRefs SR, tblRefLink RL2
-          WHERE
-            SR.RefID != ${ref_id} AND
-            SR.RefID = RL2.RefID AND
-            RL2.IsolateID = RL.IsolateID AND
-            RL2.Priority = 1
-        )
-      ) AND
-      EXISTS (
-        SELECT 1 FROM tblIsolates I
-        WHERE
-          RL.IsolateID = I.IsolateID AND
-          I.Type = 'Clinical'
-      ) AND
-      S.SequenceID = M.SequenceID AND
-      M.MutAA != '.'
-    ORDER BY RL.IsolateID, M.CodonPos, M.MutAA
-EOF
-
-
-  if [ ! -s $TMP_ISOMUT.1 ]; then
-    echo "Skip empty $TARGET_ISOMUT"
-    continue
-  fi
-
-  cat $TMP_ISOMUT.1 | python3 -c "
-import re
-import csv
-import sys
-
-reader = csv.reader(sys.stdin)
-writer = csv.writer(sys.stdout)
-
-writer.writerow(next(reader))
-for row in reader:
-  if row[4] == 'true':
-    refaa, aas = re.split(r'\d+', row[3])
-    for aa in aas:
-      if refaa == aa:
-        continue
-      row[2] = aa
-      writer.writerow(row)
-  else:
-    writer.writerow(row)
-" | csvtk cut -f 'isolate_id,position,amino_acid,is_mixture' > $TMP_ISOMUT.2
-  
-  addbom $TMP_ISOMUT.2
-  mv $TMP_ISOMUT.2 $TARGET_ISOMUT
-  echo "Create $TARGET_ISOMUT"
-
-done
-
-rm -rf $TMP_ISOMUT_DIR

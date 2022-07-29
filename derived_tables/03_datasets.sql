@@ -272,7 +272,13 @@ INSERT INTO dataset_drug_class_summaries
     NULL::FLOAT AS pcnt_isolates_accpeted
   FROM datasets d, drug_classes dc;
 
-DELETE FROM dataset_drug_class_summaries WHERE num_isolates = 0;
+DELETE FROM dataset_drug_class_summaries dc WHERE NOT EXISTS (
+  SELECT 1 FROM dataset_gene_summaries g
+  WHERE
+    dc.ref_name = g.ref_name AND
+    dc.continent_name = g.continent_name AND
+    dc.gene = g.gene
+);
 
 UPDATE dataset_drug_class_summaries dcSum
   SET pcnt_isolates = 100.0 * dcSum.num_isolates / gSum.num_isolates

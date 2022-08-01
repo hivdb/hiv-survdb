@@ -66,18 +66,44 @@ Table countries as Loc {
   Note: 'Constraint table storing country codes, names and their continents'
 }
 
-Table article_countries as RefLoc {
+Enum dataset_status_enum {
+  "PLOSMED2015"
+  "JIntAIDSSoc2020"
+  "EX"
+  "New"
+}
+
+Table datasets as D {
+  dataset_name varchar [pk]
   ref_name varchar [ref: > Ref.ref_name]
+  continent_name continent_enum
+  status dataset_status_enum [not null]
+  annotation varchar [note: 'Text annotation for this article']
+  action varchar [note: 'Machine readable filter/edit action when summarizing isolates']
+  url varchar [unique]
+
+  // latitude float [not null, note: 'Manually maintained latitude of the dataset']
+  // longitude float [not null, note: 'Manually maintained longitude of the dataset']
+
+  indexes {
+    (ref_name, continent_name) [unique]
+  }
+
+  Note: 'Derived dataset (defined as article + contient) table'
+}
+
+Table dataset_countries as DLoc {
+  dataset_name varchar [ref: > D.dataset_name]
   country_code char(3) [
     ref: > Loc.country_code,
     note: 'ISO 3166-1 alpha-3 country code'
   ]
 
   indexes {
-    (ref_name, country_code) [pk]
+    (dataset_name, country_code) [pk]
   }
 
-  Note: 'One-to-many table storing country information of articles; derived from isolate countries'
+  Note: 'One-to-many table storing country information of datasets; derived from isolate countries'
 }
 
 Table journals as J {
@@ -87,27 +113,6 @@ Table journals as J {
   ]
 
   Note: 'Constraint table for journals'
-}
-
-Enum article_status_enum {
-  "PLOSMED2015"
-  "JIntAIDSSoc2020"
-  "EX"
-  "New"
-}
-
-Table article_annotations as RefNote {
-  ref_name varchar [ref: > Ref.ref_name]
-  original_continent_name continent_enum
-  status article_status_enum [not null]
-  annotation varchar [note: 'Text annotation for this article']
-  action varchar [note: 'Machine readable filter/edit action when summarizing isolates']
-
-  indexes {
-    (ref_name, original_continent_name)
-  }
-
-  Note: 'Table storing text annotation for articles'
 }
 
 Enum gene_enum {
@@ -208,7 +213,7 @@ Enum isolate_seq_method_enum {
 }
 
 Table isolates as Iso {
-  ref_name varchar [ref: > Ref.ref_name]
+  dataset_name varchar [ref: > D.dataset_name]
   isolate_name varchar [note: 'Isolate name (PseudoName from HIVDB)']
   patient_id int [not null, note: 'PtID from HIVDB']
   gene gene_enum [not null, note: 'Gene']
@@ -230,7 +235,7 @@ Table isolates as Iso {
   date_entered date [not null]
 
   indexes {
-    (ref_name, isolate_name, gene) [pk]
+    (dataset_name, isolate_name, gene) [pk]
     (patient_id, gene, isolate_date) [unique]
     genbank_accn
     cpr_excluded
@@ -241,7 +246,7 @@ Table isolates as Iso {
 }
 
 Table isolate_mutations as IsoMut {
-  ref_name varchar
+  dataset_name varchar
   isolate_name varchar [note: 'Isolate name (PseudoName from HIVDB)']
   gene gene_enum [not null, note: 'Gene']
   mutation varchar [not null]
@@ -250,8 +255,8 @@ Table isolate_mutations as IsoMut {
   is_mixture boolean [note: 'If this position has mixtures']
 
   indexes {
-    (ref_name, isolate_name, gene, position, amino_acid) [pk]
-    (ref_name, isolate_name, gene, mutation) [unique]
+    (dataset_name, isolate_name, gene, position, amino_acid) [pk]
+    (dataset_name, isolate_name, gene, mutation) [unique]
     position
     amino_acid
   }
@@ -259,10 +264,10 @@ Table isolate_mutations as IsoMut {
   Note: 'Table storing isolate mutations imported from CPR'
 }
 
-Ref: IsoMut.(ref_name, isolate_name, gene) > Iso.(ref_name, isolate_name, gene) 
+Ref: IsoMut.(dataset_name, isolate_name, gene) > Iso.(dataset_name, isolate_name, gene) 
 
 Table isolate_excluded_surv_mutations as IsoExSDRMs {
-  ref_name varchar
+  dataset_name varchar
   isolate_name varchar [note: 'Isolate name (PseudoName from HIVDB)']
   gene gene_enum [not null, note: 'Gene']
   mutation varchar [ref: > SDRM.mutation]
@@ -270,54 +275,19 @@ Table isolate_excluded_surv_mutations as IsoExSDRMs {
   amino_acid amino_acid_enum [note: 'Mutation amino acid']
 
   indexes {
-    (ref_name, isolate_name, gene, position, amino_acid) [pk]
-    (ref_name, isolate_name, gene, mutation) [unique]
+    (dataset_name, isolate_name, gene, position, amino_acid) [pk]
+    (dataset_name, isolate_name, gene, mutation) [unique]
     position
     amino_acid
   }
 
   Note: 'Table storing SDRMs excluded by CPR'
 }
-Ref: IsoExSDRMs.(ref_name, isolate_name, gene) > Iso.(ref_name, isolate_name, gene)
+Ref: IsoExSDRMs.(dataset_name, isolate_name, gene) > Iso.(dataset_name, isolate_name, gene)
 
-
-Table article_summaries as RefSum {
-  ref_name varchar [pk, ref: > Ref.ref_name]
-
-  num_isolates int [not null, note: 'Number of isolates']
-
-  Note: 'Derived article summary table'
-}
-
-
-Table datasets as D {
-  ref_name varchar [ref: > Ref.ref_name]
-  continent_name continent_enum
-
-  // latitude float [not null, note: 'Manually maintained latitude of the dataset']
-  // longitude float [not null, note: 'Manually maintained longitude of the dataset']
-
-  indexes {
-    (ref_name, continent_name) [pk]
-    continent_name
-  }
-
-  Note: 'Derived dataset (defined as article + contient) table'
-}
-
-Table dataset_cpr_urls as CPR {
-  ref_name varchar [ref: > Ref.ref_name]
-  continent_name continent_enum
-  url varchar [pk]
-
-  indexes {
-    (ref_name, continent_name)
-  }
-}
 
 Table dataset_summaries as DSum {
-  ref_name varchar
-  continent_name continent_enum
+  dataset_name varchar [pk, ref: > D.dataset_name]
 
   isolate_year_begin int [not null, note: 'Isolate year range begin']
   isolate_year_end int [not null, note: 'Isolate year range end']
@@ -332,19 +302,11 @@ Table dataset_summaries as DSum {
   pcnt_sdrm_isolates float [not null, note: 'Percent of isolates with SDRMs']
   pcnt_sdrm_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
-  indexes {
-    (ref_name, continent_name) [pk]
-    continent_name
-  }
-
   Note: 'Derived dataset (article + contient) summary table'
 }
 
-Ref: DSum.(ref_name, continent_name) > D.(ref_name, continent_name)
-
 Table dataset_gene_summaries as DGeneSum {
-  ref_name varchar
-  continent_name continent_enum
+  dataset_name varchar [ref: > D.dataset_name]
   gene gene_enum [note: 'Gene']
 
   num_isolates int [not null, note: 'Number of isolates']
@@ -355,19 +317,15 @@ Table dataset_gene_summaries as DGeneSum {
   pcnt_sdrm_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
-    (ref_name, continent_name, gene) [pk]
-    continent_name
+    (dataset_name, gene) [pk]
     gene
   }
 
   Note: 'Derived dataset summary by gene table'
 }
 
-Ref: DGeneSum.(ref_name, continent_name) > D.(ref_name, continent_name)
-
 Table dataset_drug_class_summaries as DClassSum {
-  ref_name varchar
-  continent_name continent_enum
+  dataset_name varchar [ref: > D.dataset_name]
   gene gene_enum [note: 'Gene']
   drug_class drug_class_enum [note: 'Drug class']
 
@@ -377,8 +335,7 @@ Table dataset_drug_class_summaries as DClassSum {
   pcnt_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
-    (ref_name, continent_name, gene, drug_class) [pk]
-    continent_name
+    (dataset_name, gene, drug_class) [pk]
     gene
     drug_class
   }
@@ -386,11 +343,8 @@ Table dataset_drug_class_summaries as DClassSum {
   Note: 'Derived dataset summary by drug class table'
 }
 
-Ref: DClassSum.(ref_name, continent_name) > D.(ref_name, continent_name)
-
 Table dataset_subtype_summaries as DSubtypeSum {
-  ref_name varchar
-  continent_name continent_enum
+  dataset_name varchar [ref: > D.dataset_name]
   gene gene_enum
   subtype varchar
 
@@ -402,8 +356,7 @@ Table dataset_subtype_summaries as DSubtypeSum {
   pcnt_sdrm_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
-    (ref_name, continent_name, gene, subtype) [pk]
-    continent_name
+    (dataset_name, gene, subtype) [pk]
     gene
     subtype
   }
@@ -411,11 +364,8 @@ Table dataset_subtype_summaries as DSubtypeSum {
   Note: 'Derived dataset summary by subtype table'
 }
 
-Ref: DSubtypeSum.(ref_name, continent_name) > D.(ref_name, continent_name)
-
 Table dataset_surv_mutation_summaries as DSDRM {
-  ref_name varchar
-  continent_name continent_enum
+  dataset_name varchar [ref: > D.dataset_name]
   gene gene_enum
   mutation varchar [ref: > SDRM.mutation]
 
@@ -425,16 +375,13 @@ Table dataset_surv_mutation_summaries as DSDRM {
   pcnt_isolates_accepted float [note: 'Percent of isolates with SDRMs accepted by CPR']
 
   indexes {
-    (ref_name, continent_name, gene, mutation) [pk]
-    continent_name
+    (dataset_name, gene, mutation) [pk]
     gene
     mutation
   }
 
   Note: 'Derived table storing the occurrence of SDRMs per articles'
 }
-
-Ref: DSDRM.(ref_name, continent_name) > D.(ref_name, continent_name)
 
 
 Table last_update {

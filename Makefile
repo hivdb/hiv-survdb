@@ -72,14 +72,15 @@ pre-release: update-builder network docker-envfile
    		hivdb/hiv-survdb-builder:latest \
 		scripts/github-release.sh --pre-release
 
-sync-from-hivdb: update-builder docker-envfile .ssh-devnext2n-mysql.pid
+reflist ?= ""
+import-from-hivdb: update-builder docker-envfile .ssh-devnext2n-mysql.pid
 	@docker run --rm -it \
 		--volume=$(shell pwd):/hiv-survdb/ \
 		--volume=$(shell dirname $$(pwd))/hiv-survdb-payload:/hiv-survdb-payload \
 		--env HIVDB_HOST=${LOIP} \
 		--env-file ./docker-envfile \
    		hivdb/hiv-survdb-builder:latest \
-		scripts/sync-from-hivdb.sh
+		scripts/import-from-hivdb.sh ${reflist}
 
 sync-from-cpr: update-builder
 	@docker run --rm -it \

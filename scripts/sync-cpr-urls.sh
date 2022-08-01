@@ -45,7 +45,7 @@ for ref_name in $(tail -n +2 payload/tables/articles.csv | cut -d ',' -f 1); do
   fi
 done
 
-tail -n +2 payload/suppl-tables/cpr_POL.txt | while IFS=$'\t' read fasfile url; do
+tail -n +2 payload/suppl-tables/cpr_POL_new.txt | while IFS=$'\t' read fasfile url; do
   key_name="${fasfile%-seq.fas}"
   lower_ref_name=$key_name
   continent_name='NULL'
@@ -71,7 +71,7 @@ tail -n +2 payload/suppl-tables/cpr_POL.txt | while IFS=$'\t' read fasfile url; 
 
   permurl=$(make_permanent_link $url $key_name)
   ref_name="${REFNAME_LOOKUP[$lower_ref_name]}"
-  echo $ref_name,$continent_name,$permurl >> payload/tables/dataset_cpr_urls.csv
+  echo $ref_name,$continent_name,$permurl >> payload/tables/dataset_cpr_urls_new.csv
 done
 
-addbom payload/tables/dataset_cpr_urls.csv
+addbom payload/tables/dataset_cpr_urls_new.csv

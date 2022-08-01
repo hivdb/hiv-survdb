@@ -40,102 +40,11 @@ function query() {
   rm "$tmpfile"
 }
 
-# ================
-# Table `journals`
-# ================
-
-TARGET_JOURNALS=payload/tables/journals.csv
-query > $TARGET_JOURNALS <<EOF
-  SELECT DISTINCT
-    Journal as journal_name
-  FROM tblReferences R
-  WHERE EXISTS (
-    SELECT 1 FROM tblSurRefs SR WHERE
-      SR.RefID=R.RefID
-  )
-  ORDER BY journal_name
-EOF
-
-addbom $TARGET_JOURNALS
-echo "Create $TARGET_JOURNALS"
-
-# ================
-# Table `articles`
-# ================
-
-TARGET_ARTICLES=payload/tables/articles.csv
-TMP_ARTICLES=/tmp/articles.csv
-
-query > $TMP_ARTICLES <<EOF
-  SELECT DISTINCT
-    R.RefID as ref_id,
-    'NULL' as doi,
-    R.MedlineID as medline_id,
-    'NULL' as url,
-    R.Author as first_author,
-    R.Title as title,
-    CASE
-       WHEN LOWER(R.Journal) = 'plos one' THEN 'PLoS ONE'
-       ELSE R.Journal
-    END as journal_name,
-    R.RefYear as year,
-    CASE WHEN Published = 'Yes' THEN 'TRUE' ELSE 'FALSE' END AS published
-  FROM tblSurRefs SR, tblReferences R
-  WHERE
-    SR.RefID = R.RefID AND
-    R.RefID NOT IN (1154)
-EOF
-
-if [ ! -f $TARGET_ARTICLES -o ! -s $TARGET_ARTICLES ]; then
-  cp $TMP_ARTICLES $TARGET_ARTICLES
+if [ -z "$1" -o ! -f "$1" ]; then
+  echo "Usage: make reflist=path/to/reflist.csv import-from-hivdb"
+  exit 1
 fi
-cat $TARGET_ARTICLES |
-  csvtk cut -f '-medline_id,-published,-first_author,-title,-journal_name,-year' > $TMP_ARTICLES.1
-
-cat $TMP_ARTICLES |
-  csvtk cut -f '-doi,-url' > $TMP_ARTICLES.2
-
-csvtk join --outer-join $TMP_ARTICLES.1 $TMP_ARTICLES.2 -f ref_id --na NULL |
-  csvtk cut -f 'ref_name,ref_id,doi,medline_id,url,first_author,title,journal_name,year,published' |
-  csvtk uniq -F -f '*' |
-  csvtk sort -k ref_name > $TARGET_ARTICLES
-rm $TMP_ARTICLES
-rm $TMP_ARTICLES.1
-rm $TMP_ARTICLES.2
-
-addbom $TARGET_ARTICLES
-echo "Create $TARGET_ARTICLES"
-
-# # ===========================
-# # Table `article_annotations`
-# # ===========================
-# 
-# TMP_ANNOTS=/tmp/ref_annots.csv
-# TARGET_ANNOTS=payload/tables/article_annotations.csv
-# 
-# query > $TMP_ANNOTS.1 <<EOF
-#   SELECT DISTINCT
-#     SR.RefID as ref_id,
-#     SR.Status as status,
-#     SR.Study_Notes as annotation,
-#     CASE WHEN SR.Action LIKE 'Use_Only_From_Region:%' THEN 'NULL' ELSE SR.Action END as action
-#   FROM tblSurRefs SR
-#   WHERE
-#     SR.RefID NOT IN (1154)
-# EOF
-# 
-# cat $TARGET_ARTICLES |
-#   csvtk cut -f 'ref_name,ref_id' > $TMP_ANNOTS.2
-# 
-# csvtk join $TMP_ANNOTS.1 $TMP_ANNOTS.2 -f ref_id --na NULL |
-#   csvtk cut -f 'ref_name,status,annotation,action' |
-#   csvtk sort -k ref_name > $TARGET_ANNOTS
-# rm $TMP_ANNOTS.1
-# rm $TMP_ANNOTS.2
-# 
-# addbom $TARGET_ANNOTS
-# echo "Create $TARGET_ANNOTS"
-
+echo $1
 
 # ================
 # Table `isolates`
@@ -151,11 +60,11 @@ RT
 IN
 EOF
 
-rm -rf $TARGET_ISO_DIR
+# rm -rf $TARGET_ISO_DIR
 mkdir -p $TMP_ISO_DIR
 mkdir -p $TARGET_ISO_DIR
 
-cat $TARGET_ARTICLES |
+cat $1 |
   csvtk cut -f ref_name,ref_id |
   csvtk del-header |
   csvtk csv2tab | while IFS=$'\t' read -r ref_name ref_id;
@@ -165,7 +74,7 @@ do
   
   query > $TMP_ISO.1 <<EOF
     SELECT
-      '${ref_name//\'/\'\'}' as ref_name,
+      '${ref_name//\'/\'\'}' as dataset_name,
       P.PseudoName as isolate_name,
       I.PtID as patient_id,
       I.Gene as gene,
@@ -207,7 +116,7 @@ EOF
   fi
 
   csvtk join --left-join $TMP_ISO.1 payload/suppl-tables/country_names_and_codes.csv -f country_name --na NULL |
-    csvtk cut -f ref_name,isolate_name,patient_id,gene,isolate_date,subtype,source,seq_method,country_code,genbank_accn,cpr_excluded,date_entered > $TMP_ISO.2
+    csvtk cut -f dataset_name,isolate_name,patient_id,gene,isolate_date,subtype,source,seq_method,country_code,genbank_accn,cpr_excluded,date_entered > $TMP_ISO.2
 
   csvtk cut -f isolate_name $TMP_ISO.2 | csvtk del-header | sort --version-sort > $TMP_ISO.3
   csvtk sort -k isolate_name:u,gene:u -L isolate_name:$TMP_ISO.3 -L gene:$GENE_ORDER $TMP_ISO.2 > $TMP_ISO.4

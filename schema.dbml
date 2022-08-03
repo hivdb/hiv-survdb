@@ -219,17 +219,19 @@ Table isolates as Iso {
   gene gene_enum [not null, note: 'Gene']
   isolate_date date [not null]
   subtype varchar [not null]
-  source isolate_source_enum
+  source isolate_source_enum [not null]
   // clone_method isolate_clone_method_enum // looks like all clone_method's are None 
-  seq_method isolate_seq_method_enum
+  seq_method isolate_seq_method_enum [not null]
   country_code char(3) [
     ref: > Loc.country_code,
+    not null,
     note: 'ISO 3166-1 alpha-3 country code where this isolate was collected'
   ]
   genbank_accn varchar [
     note: 'Genbank accession number(s); comma delimited'
   ]
   cpr_excluded boolean [
+    not null,
     note: 'The isolate is excluded by CPR if true'
   ]
   date_entered date [not null]
@@ -238,6 +240,7 @@ Table isolates as Iso {
     (dataset_name, isolate_name, gene) [pk]
     (patient_id, gene, isolate_date) [unique]
     genbank_accn
+    country_code
     cpr_excluded
   }
 
@@ -285,6 +288,44 @@ Table isolate_excluded_surv_mutations as IsoExSDRMs {
 }
 Ref: IsoExSDRMs.(dataset_name, isolate_name, gene) > Iso.(dataset_name, isolate_name, gene)
 
+Table patterns as P {
+  pattern_id varchar [pk, increment]
+  gene gene_enum [not null, note: 'Gene']
+  pattern varchar [not null, note: 'comma separated SDRM list']
+  year int [not null, note: 'Year when this pattern was collected']
+  subtype varchar [not null]
+  source isolate_source_enum [not null]
+  seq_method isolate_seq_method_enum [not null]
+  country_code char(3) [
+    ref: > Loc.country_code,
+    not null,
+    note: 'ISO 3166-1 alpha-3 country code where this isolate was collected'
+  ]
+  cpr_excluded bool [not null]
+
+  indexes {
+    gene
+    pattern
+    year
+    subtype
+    source
+    seq_method
+    country_code
+    cpr_excluded
+  }
+
+  Note: 'Derived pattern table of distinct isolate properties'
+}
+
+Table dataset_patterns as DP {
+  dataset_name varchar [ref: > D.dataset_name]
+  pattern_id int [ref: > P.pattern_id]
+  num_isolates int [not null, note: 'Number of isolates of this pattern']
+
+  indexes {
+    (dataset_name, pattern_id) [pk]
+  }
+}
 
 Table dataset_summaries as DSum {
   dataset_name varchar [pk, ref: > D.dataset_name]

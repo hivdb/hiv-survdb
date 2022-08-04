@@ -95,6 +95,7 @@ INSERT INTO dataset_patterns (
   FROM isolate_patterns ip, tmp_patterns p
   WHERE
     ip.pattern = p.pattern AND
+    ip.genes = p.genes AND
     ip.year = p.year AND
     -- ip.subtype = p.subtype AND
     ip.country_code = p.country_code

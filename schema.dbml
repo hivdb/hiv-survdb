@@ -292,6 +292,7 @@ Table patterns as P {
   pattern_id varchar [pk, increment]
   gene gene_enum [not null, note: 'Gene']
   pattern varchar [not null, note: 'comma separated SDRM list']
+  drug_classes varchar [not null, note: 'comma separated drug class list']
   year int [not null, note: 'Year when this pattern was collected']
   subtype varchar [not null]
   source isolate_source_enum [not null]
@@ -306,6 +307,7 @@ Table patterns as P {
   indexes {
     gene
     pattern
+    drug_classes
     year
     subtype
     source

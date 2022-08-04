@@ -5,9 +5,14 @@ SELECT
   iso.gene || ':' ||
   STRING_AGG(
     SPLIT_PART(isomut.mutation, ':', 2),
-    '+'
+    ','
     ORDER BY isomut.position, isomut.amino_acid
   ) AS pattern,
+  STRING_AGG(
+    DISTINCT sdrm.drug_class::text,
+    ','
+    ORDER BY sdrm.drug_class::text
+  ) AS drug_classes,
   EXTRACT(YEAR FROM isolate_date) AS year,
   subtype,
   source,
@@ -31,6 +36,8 @@ LEFT JOIN isolate_mutations isomut ON
       isomut.isolate_name = exsdrm.isolate_name AND
       isomut.mutation = exsdrm.mutation
   )
+LEFT JOIN surv_mutations sdrm ON
+  isomut.mutation = sdrm.mutation
 GROUP BY
   iso.dataset_name, iso.isolate_name, iso.gene, year,
   subtype, source, seq_method, country_code, cpr_excluded;
@@ -39,9 +46,14 @@ UPDATE isolate_patterns
   SET pattern = gene || ':'
   WHERE pattern IS NULL;
 
+UPDATE isolate_patterns
+  SET drug_classes = ''
+  WHERE drug_classes IS NULL;
+
 INSERT INTO patterns (
   gene,
   pattern,
+  drug_classes,
   year,
   subtype,
   source,
@@ -53,6 +65,7 @@ INSERT INTO patterns (
     DISTINCT
     gene,
     pattern,
+    drug_classes,
     year,
     subtype,
     source,

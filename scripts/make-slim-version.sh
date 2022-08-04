@@ -11,7 +11,7 @@ DELETE FROM articles AS ref WHERE NOT EXISTS (
 DELETE FROM countries AS reg WHERE NOT EXISTS (
   SELECT 1 FROM isolates iso WHERE
     reg.country_code = iso.country_code
-);
+) AND reg.country_name != reg.continent_name;
 DELETE FROM isolates;
 DELETE FROM isolate_mutations;
 DELETE FROM isolate_excluded_surv_mutations;

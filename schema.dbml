@@ -289,10 +289,8 @@ Table isolate_excluded_surv_mutations as IsoExSDRMs {
 Ref: IsoExSDRMs.(dataset_name, isolate_name, gene) > Iso.(dataset_name, isolate_name, gene)
 
 Table patterns as P {
-  pattern_id varchar [pk, increment]
+  pattern_id int [pk]
   gene gene_enum [not null, note: 'Gene']
-  pattern varchar [not null, note: 'comma separated SDRM list']
-  drug_classes varchar [not null, note: 'comma separated drug class list']
   year int [not null, note: 'Year when this pattern was collected']
   subtype varchar [not null]
   source isolate_source_enum [not null]
@@ -306,8 +304,6 @@ Table patterns as P {
 
   indexes {
     gene
-    pattern
-    drug_classes
     year
     subtype
     source
@@ -317,6 +313,15 @@ Table patterns as P {
   }
 
   Note: 'Derived pattern table of distinct isolate properties'
+}
+
+Table pattern_surv_mutations as PMut {
+  pattern_id int [ref: > P.pattern_id]
+  mutation varchar
+
+  indexes {
+    (pattern_id, mutation) [pk]
+  }
 }
 
 Table dataset_patterns as DP {

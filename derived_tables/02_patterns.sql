@@ -2,17 +2,11 @@ SELECT
   iso.dataset_name,
   iso.isolate_name,
   iso.gene,
-  iso.gene || ':' ||
   STRING_AGG(
-    SPLIT_PART(isomut.mutation, ':', 2),
+    isomut.mutation,
     ','
     ORDER BY isomut.position, isomut.amino_acid
   ) AS pattern,
-  STRING_AGG(
-    DISTINCT sdrm.drug_class::text,
-    ','
-    ORDER BY sdrm.drug_class::text
-  ) AS drug_classes,
   EXTRACT(YEAR FROM isolate_date) AS year,
   subtype,
   source,
@@ -43,29 +37,25 @@ GROUP BY
   subtype, source, seq_method, country_code, cpr_excluded;
 
 UPDATE isolate_patterns
-  SET pattern = gene || ':'
+  SET pattern = ''
   WHERE pattern IS NULL;
 
-UPDATE isolate_patterns
-  SET drug_classes = ''
-  WHERE drug_classes IS NULL;
-
-INSERT INTO patterns (
+SELECT
+  ROW_NUMBER() OVER () AS pattern_id,
   gene,
   pattern,
-  drug_classes,
   year,
   subtype,
   source,
   seq_method,
   country_code,
   cpr_excluded
-) (
+INTO TABLE tmp_patterns
+FROM (
   SELECT
     DISTINCT
     gene,
     pattern,
-    drug_classes,
     year,
     subtype,
     source,
@@ -73,14 +63,35 @@ INSERT INTO patterns (
     country_code,
     cpr_excluded
   FROM isolate_patterns
+) tmp;
+
+INSERT INTO patterns (
+  SELECT
+    pattern_id,
+    gene,
+    year,
+    subtype,
+    source,
+    seq_method,
+    country_code,
+    cpr_excluded
+  FROM tmp_patterns
 );
+
+INSERT INTO pattern_surv_mutations (
+  SELECT pattern_id, mutation
+  FROM tmp_patterns, UNNEST(STRING_TO_ARRAY(pattern, ',')) mutation
+);
+
+DELETE FROM pattern_surv_mutations
+  WHERE mutation = '';
 
 INSERT INTO dataset_patterns (
   SELECT
     dataset_name,
     pattern_id,
     COUNT(*) AS num_isolates
-  FROM isolate_patterns ip, patterns p
+  FROM isolate_patterns ip, tmp_patterns p
   WHERE
     ip.gene = p.gene AND
     ip.pattern = p.pattern AND
@@ -94,3 +105,4 @@ INSERT INTO dataset_patterns (
 );
 
 DROP TABLE isolate_patterns;
+DROP TABLE tmp_patterns;

@@ -1,40 +1,46 @@
 SELECT
-  iso.dataset_name,
-  iso.isolate_name,
-  iso.gene,
-  STRING_AGG(
-    isomut.mutation,
-    ','
-    ORDER BY isomut.position, isomut.amino_acid
-  ) AS pattern,
-  EXTRACT(YEAR FROM isolate_date) AS year,
-  subtype,
-  source,
-  seq_method,
-  country_code,
-  cpr_excluded
-INTO TABLE isolate_patterns
-FROM isolates iso
-LEFT JOIN isolate_mutations isomut ON
-  iso.dataset_name = isomut.dataset_name AND
-  iso.isolate_name = isomut.isolate_name AND
-  iso.gene = isomut.gene AND
-  EXISTS (
-    SELECT 1 FROM surv_mutations sdrm WHERE
-      isomut.mutation = sdrm.mutation
-  ) AND
-  NOT EXISTS (
-    SELECT 1 FROM isolate_excluded_surv_mutations exsdrm
+  dataset_name,
+  isolate_name,
+  (SELECT
+    STRING_AGG(
+      mutation,
+      ','
+      ORDER BY gene, position, amino_acid
+    ) AS pattern
+    FROM surv_mutations sdrm
     WHERE
-      isomut.dataset_name = exsdrm.dataset_name AND
-      isomut.isolate_name = exsdrm.isolate_name AND
-      isomut.mutation = exsdrm.mutation
-  )
-LEFT JOIN surv_mutations sdrm ON
-  isomut.mutation = sdrm.mutation
-GROUP BY
-  iso.dataset_name, iso.isolate_name, iso.gene, year,
-  subtype, source, seq_method, country_code, cpr_excluded;
+      EXISTS (
+        SELECT 1 FROM isolate_mutations isomut
+        WHERE
+          iso.dataset_name = isomut.dataset_name AND
+          iso.isolate_name = isomut.isolate_name AND
+          isomut.mutation = sdrm.mutation
+      ) AND
+      NOT EXISTS (
+        SELECT 1 FROM isolate_excluded_surv_mutations exsdrm
+        WHERE
+          iso.dataset_name = exsdrm.dataset_name AND
+          iso.isolate_name = exsdrm.isolate_name AND
+          sdrm.mutation = exsdrm.mutation
+      )
+  ) AS pattern,
+  genes,
+  year,
+  -- subtype,
+  country_code
+INTO TABLE isolate_patterns
+FROM (
+  SELECT
+    dataset_name,
+    isolate_name,
+    STRING_AGG(gene::text, ',' ORDER BY gene) AS genes,
+    EXTRACT(YEAR FROM isolate_date) AS year,
+    -- STRING_AGG(DISTINCT subtype, ',' ORDER BY subtype) AS subtype,
+    country_code
+  FROM isolates
+  WHERE cpr_excluded IS FALSE
+  GROUP BY dataset_name, isolate_name, year, country_code
+) iso;
 
 UPDATE isolate_patterns
   SET pattern = ''
@@ -42,45 +48,40 @@ UPDATE isolate_patterns
 
 SELECT
   ROW_NUMBER() OVER () AS pattern_id,
-  gene,
   pattern,
+  genes,
   year,
-  subtype,
-  source,
-  seq_method,
-  country_code,
-  cpr_excluded
+  -- subtype,
+  country_code
 INTO TABLE tmp_patterns
 FROM (
   SELECT
     DISTINCT
-    gene,
     pattern,
+    genes,
     year,
-    subtype,
-    source,
-    seq_method,
-    country_code,
-    cpr_excluded
+    -- subtype,
+    country_code
   FROM isolate_patterns
 ) tmp;
 
 INSERT INTO patterns (
   SELECT
     pattern_id,
-    gene,
     year,
-    subtype,
-    source,
-    seq_method,
-    country_code,
-    cpr_excluded
+    -- subtype,
+    country_code
   FROM tmp_patterns
 );
 
 INSERT INTO pattern_surv_mutations (
   SELECT pattern_id, mutation
   FROM tmp_patterns, UNNEST(STRING_TO_ARRAY(pattern, ',')) mutation
+);
+
+INSERT INTO pattern_genes (
+  SELECT pattern_id, gene::gene_enum
+  FROM tmp_patterns, UNNEST(STRING_TO_ARRAY(genes, ',')) gene
 );
 
 DELETE FROM pattern_surv_mutations
@@ -93,14 +94,10 @@ INSERT INTO dataset_patterns (
     COUNT(*) AS num_isolates
   FROM isolate_patterns ip, tmp_patterns p
   WHERE
-    ip.gene = p.gene AND
     ip.pattern = p.pattern AND
     ip.year = p.year AND
-    ip.subtype = p.subtype AND
-    ip.source = p.source AND
-    ip.seq_method = p.seq_method AND
-    ip.country_code = p.country_code AND
-    ip.cpr_excluded = p.cpr_excluded
+    -- ip.subtype = p.subtype AND
+    ip.country_code = p.country_code
   GROUP BY dataset_name, pattern_id
 );
 

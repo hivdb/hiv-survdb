@@ -290,29 +290,31 @@ Ref: IsoExSDRMs.(dataset_name, isolate_name, gene) > Iso.(dataset_name, isolate_
 
 Table patterns as P {
   pattern_id int [pk]
-  gene gene_enum [not null, note: 'Gene']
   year int [not null, note: 'Year when this pattern was collected']
-  subtype varchar [not null]
-  source isolate_source_enum [not null]
-  seq_method isolate_seq_method_enum [not null]
+  // TODO: we need to clean-up subtypes: for each patient there should be only one subtype
+  // subtype varchar [not null]
   country_code char(3) [
     ref: > Loc.country_code,
     not null,
     note: 'ISO 3166-1 alpha-3 country code where this isolate was collected'
   ]
-  cpr_excluded bool [not null]
 
   indexes {
-    gene
     year
-    subtype
-    source
-    seq_method
+    // subtype
     country_code
-    cpr_excluded
   }
 
   Note: 'Derived pattern table of distinct isolate properties'
+}
+
+Table pattern_genes as PGene {
+  pattern_id int [ref: > P.pattern_id]
+  gene gene_enum
+
+  indexes {
+    (pattern_id, gene) [pk]
+  }
 }
 
 Table pattern_surv_mutations as PMut {

@@ -47,6 +47,22 @@ Enum continent_enum {
   "South America"
 }
 
+Enum subregion_enum {
+  "Asia"
+  "Caribbean"
+  "Central Africa"
+  "Central America"
+  "Eastern Africa"
+  "Europe"
+  "North America"
+  "Northern Africa"
+  "Oceania"
+  "Post-Soviet States"
+  "South America"
+  "Southern Africa"
+  "Western Africa"
+}
+
 Table countries as Loc {
   country_code char(3) [
     pk,
@@ -58,9 +74,11 @@ Table countries as Loc {
     note: 'The name of the country or region'
   ]
   continent_name continent_enum [not null]
+  subregion_name subregion_enum
 
   indexes {
     continent_name
+    subregion_name
   }
 
   Note: 'Constraint table storing country codes, names and their continents'

@@ -60,6 +60,7 @@ Enum subregion_enum {
   "Post-Soviet States"
   "South America"
   "Southern Africa"
+  "Sub-Saharan Africa"
   "Western Africa"
 }
 
@@ -74,14 +75,26 @@ Table countries as Loc {
     note: 'The name of the country or region'
   ]
   continent_name continent_enum [not null]
-  subregion_name subregion_enum
 
   indexes {
     continent_name
-    subregion_name
   }
 
   Note: 'Constraint table storing country codes, names and their continents'
+}
+
+Table country_subregions as LocReg {
+  country_code char(3) [
+    ref: > Loc.country_code,
+    not null,
+    note: 'ISO 3166-1 alpha-3 country code where this isolate was collected'
+  ]
+  subregion_name subregion_enum
+
+  indexes {
+    (country_code, subregion_name) [pk]
+  }
+
 }
 
 Enum dataset_status_enum {

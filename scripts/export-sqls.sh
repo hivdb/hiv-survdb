@@ -44,6 +44,7 @@ copy_csv payload/tables/journals.csv journals >> $TARGET_DIR/02_data_tables.sql
 copy_csv payload/tables/articles.csv articles >> $TARGET_DIR/02_data_tables.sql
 copy_csv payload/tables/datasets.csv datasets >> $TARGET_DIR/02_data_tables.sql
 copy_csv payload/tables/countries.csv countries >> $TARGET_DIR/02_data_tables.sql
+copy_csv payload/tables/country_subregions.csv country_subregions >> $TARGET_DIR/02_data_tables.sql
 copy_csv payload/tables/surv_mutations.csv surv_mutations >> $TARGET_DIR/02_data_tables.sql
 
 ls payload/tables/isolates.d/*.csv | sort -h | while read filepath; do

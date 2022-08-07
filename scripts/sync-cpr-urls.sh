@@ -32,7 +32,7 @@ function addbom() {
   rm $1.1
 }
 
-echo "ref_name,continent_name,permanent_url" > payload/tables/dataset_cpr_urls.csv
+echo "ref_name,continent_name,permanent_url" > payload/suppl-tables/dataset_cpr_urls_new.csv
 
 declare -A REFNAME_LOOKUP
 
@@ -71,7 +71,7 @@ tail -n +2 payload/suppl-tables/cpr_POL_new.txt | while IFS=$'\t' read fasfile u
 
   permurl=$(make_permanent_link $url $key_name)
   ref_name="${REFNAME_LOOKUP[$lower_ref_name]}"
-  echo $ref_name,$continent_name,$permurl >> payload/tables/dataset_cpr_urls_new.csv
+  echo $ref_name,$continent_name,$permurl >> payload/suppl-tables/dataset_cpr_urls_new.csv
 done
 
-addbom payload/tables/dataset_cpr_urls_new.csv
+addbom payload/suppl-tables/dataset_cpr_urls_new.csv

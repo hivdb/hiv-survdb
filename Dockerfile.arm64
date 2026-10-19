@@ -1,0 +1,22 @@
+FROM arm64v8/debian:bookworm
+
+ENV LANG=C.UTF-8
+WORKDIR /hiv-survdb
+
+RUN apt-get update -qqy && apt-get install -qy \
+    ca-certificates curl bzip2 unzip dos2unix sqlite3 jq pigz \
+    default-mysql-client git python3-dev python3-venv
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
+    apt-get install -qy nodejs && \
+    npm install --location=global @dbml/cli
+RUN curl -fsSL https://github.com/shenwei356/csvtk/releases/download/v0.34.0/csvtk_linux_arm64.tar.gz -o csvtk.tar.gz && \
+    tar -zxf csvtk.tar.gz && \
+    mv csvtk /usr/bin/csvtk && \
+    chmod +x /usr/bin/csvtk && \
+    rm csvtk.tar.gz
+RUN python3 -m venv /opt/uv && \
+    /opt/uv/bin/pip install uv==0.12.12
+COPY pyproject.toml uv.lock ./
+RUN UV_PROJECT_ENVIRONMENT=/opt/venv /opt/uv/bin/uv sync --frozen --no-dev --no-install-project
+ENV PATH="/opt/venv/bin:${PATH}"
+RUN mkdir -p /local

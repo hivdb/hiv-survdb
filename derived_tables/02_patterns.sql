@@ -34,7 +34,7 @@ FROM (
     dataset_name,
     isolate_name,
     STRING_AGG(gene::text, ',' ORDER BY gene) AS genes,
-    EXTRACT(YEAR FROM isolate_date) AS year,
+    COALESCE(isolate_year, EXTRACT(YEAR FROM isolate_date)) AS year,
     -- STRING_AGG(DISTINCT subtype, ',' ORDER BY subtype) AS subtype,
     country_code
   FROM isolates

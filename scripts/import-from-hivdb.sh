@@ -33,7 +33,11 @@ function addbom() {
 
 function query() {
   tmpfile=$(mktemp)
-  mysql --batch -h$HIVDB_HOST -u$HIVDB_USER -p$HIVDB_PASSWORD HIVDB2 "$@" > "$tmpfile"
+  mysql_args=(--batch --host="$HIVDB_HOST" --port="${HIVDB_PORT:-3306}" --user="$HIVDB_USER")
+  if [ -n "$HIVDB_PASSWORD" ]; then
+    mysql_args+=(--password="$HIVDB_PASSWORD")
+  fi
+  mysql "${mysql_args[@]}" "${HIVDB_DATABASE:-HIVDB2}" "$@" > "$tmpfile"
   if [ -s "$tmpfile" ]; then
     cat "$tmpfile" | tab2csv
   fi
@@ -94,7 +98,8 @@ do
       JOIN tblSubtypes ST ON RL.IsolateID=ST.IsolateID
       JOIN tblPatients P ON I.PtID = P.PtID
     WHERE
-      RL.RefID = ${ref_id}
+      RL.RefID = ${ref_id} AND
+      I.Gene IN ('PR', 'RT', 'IN')
     GROUP BY
       P.PseudoName,
       I.PtID,

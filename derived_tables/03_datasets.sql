@@ -4,7 +4,7 @@ SELECT
   isolate_name,
   patient_id,
   gene,
-  EXTRACT(YEAR FROM isolate_date) AS year,
+  COALESCE(isolate_year, EXTRACT(YEAR FROM isolate_date)) AS year,
   subtype,
   source,
   seq_method,
@@ -99,7 +99,9 @@ INSERT INTO dataset_summaries
     0 AS pcnt_sdrm_isolates,
     NULL::FLOAT AS pcnt_sdrm_isolates_accepted
   FROM datasets d
-  WHERE status NOT IN ('EX', 'New');
+  WHERE EXISTS (
+    SELECT 1 FROM dataset_isolates diso WHERE diso.dataset_name = d.dataset_name
+  );
 
 UPDATE dataset_summaries
   SET pcnt_sdrm_isolates = 100.0 * num_sdrm_isolates / num_isolates;
@@ -166,8 +168,7 @@ INSERT INTO dataset_gene_summaries
     ) AS num_sdrm_isolates_accepted,
     0 AS pcnt_sdrm_isolates,
     NULL::FLOAT AS pcnt_sdrm_isolates_accpeted
-  FROM datasets d, (SELECT unnest(enum_range(NULL::gene_enum)) AS gene) g
-  WHERE status NOT IN ('EX', 'New');
+  FROM datasets d, (SELECT unnest(enum_range(NULL::gene_enum)) AS gene) g;
 
 DELETE FROM dataset_gene_summaries WHERE num_isolates = 0;
 
@@ -226,8 +227,7 @@ INSERT INTO dataset_drug_class_summaries
     ) AS num_isolates_accepted,
     0 AS pcnt_isolates,
     NULL::FLOAT AS pcnt_isolates_accpeted
-  FROM datasets d, drug_classes dc
-  WHERE status NOT IN ('EX', 'New');
+  FROM datasets d, drug_classes dc;
 
 DELETE FROM dataset_drug_class_summaries dc WHERE NOT EXISTS (
   SELECT 1 FROM dataset_gene_summaries g
@@ -320,9 +320,7 @@ INSERT INTO dataset_subtype_summaries
     0 AS pcnt_sdrm_isolates,
     NULL::FLOAT AS pcnt_sdrm_isolates_accpeted
   FROM datasets d, subtypes s, (SELECT unnest(enum_range(NULL::gene_enum)) AS gene) g
-  WHERE
-    status NOT IN ('EX', 'New') AND
-    EXISTS (
+  WHERE EXISTS (
       SELECT 1 FROM dataset_isolates diso
       WHERE
         diso.dataset_name = d.dataset_name AND
@@ -392,9 +390,7 @@ INSERT INTO dataset_surv_mutation_summaries
     0 AS pcnt_isolates,
     NULL::FLOAT AS pcnt_isolates_accpeted
   FROM datasets d, surv_mutations m
-  WHERE
-    status NOT IN ('EX', 'New') AND
-    EXISTS (
+  WHERE EXISTS (
       SELECT 1 FROM dataset_isolates diso, isolate_mutations isomut
       WHERE
         diso.dataset_name = d.dataset_name AND

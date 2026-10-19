@@ -12,8 +12,9 @@ cd $(dirname $0)/..
 function copy_csv() {
     source_csv=$1
     target_table=$2
+    columns=$(head -n 1 "$source_csv" | sed 's/^\xEF\xBB\xBF//' | tr -d '\r' | sed 's/countinent_name/continent_name/' | sed 's/,/", "/g')
     cat <<EOF
-COPY "$target_table" FROM STDIN WITH DELIMITER ',' CSV HEADER NULL 'NULL';
+COPY "$target_table" ("$columns") FROM STDIN WITH DELIMITER ',' CSV HEADER NULL 'NULL';
 $(cat $source_csv | dos2unix)
 \.
 
@@ -51,12 +52,8 @@ ls payload/tables/isolates.d/*.csv | sort -h | while read filepath; do
     copy_csv $filepath isolates >> $TARGET_DIR/02_data_tables.sql
 done
 
-ls payload/tables/isolate_mutations.d/*.csv | sort -h | while read filepath; do
+python3 scripts/list-art-naive-mutation-files.py | sort -h | while read filepath; do
     copy_csv $filepath isolate_mutations >> $TARGET_DIR/02_data_tables.sql
-done
-
-ls payload/tables/isolate_excluded_surv_mutations.d/*.csv | sort -h | while read filepath; do
-    copy_csv $filepath isolate_excluded_surv_mutations >> $TARGET_DIR/02_data_tables.sql
 done
 
 pushd payload/

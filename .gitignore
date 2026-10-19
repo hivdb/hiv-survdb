@@ -7,4 +7,5 @@ docker-envfile
 DS_Store
 local/
 build/
+.venv/
 .DS_Store

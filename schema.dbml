@@ -98,10 +98,11 @@ Table country_subregions as LocReg {
 }
 
 Enum dataset_status_enum {
-  "PLOSMED2015"
-  "JIntAIDSSoc2020"
-  "EX"
-  "New"
+  "ART-naive"
+  "INSTI-naive"
+  "ART-naive;INSTI-naive"
+  "PI-naive"
+  "INSTI-naive;PI-naive"
 }
 
 Table datasets as D {
@@ -111,7 +112,7 @@ Table datasets as D {
   status dataset_status_enum [not null]
   annotation varchar [note: 'Text annotation for this article']
   action varchar [note: 'Machine readable filter/edit action when summarizing isolates']
-  url varchar [unique]
+  url varchar [note: 'CPR report link; continent datasets from one reference share a URL']
 
   // latitude float [not null, note: 'Manually maintained latitude of the dataset']
   // longitude float [not null, note: 'Manually maintained longitude of the dataset']
@@ -150,6 +151,7 @@ Enum gene_enum {
   PR
   RT
   IN
+  CA
 }
 
 Enum drug_class_enum {
@@ -200,7 +202,7 @@ Table surv_mutations as SDRM {
   gene gene_enum [not null, note: 'Gene']
   drug_class drug_class_enum [not null, note: 'Drug Class']
   position int [not null, note: 'AA Position in gene']
-  amino_acid amino_acid_enum [not null, note: 'Mutation amino acid']
+  amino_acid varchar [not null, note: 'Mutation amino acid or insertion/deletion symbol']
 
   indexes {
     (gene, position, amino_acid) [unique]
@@ -245,14 +247,16 @@ Enum isolate_seq_method_enum {
 
 Table isolates as Iso {
   dataset_name varchar [ref: > D.dataset_name]
-  isolate_name varchar [note: 'Isolate name (PseudoName from HIVDB)']
+  isolate_name varchar [note: 'Surveillance calculation uses HIVDB IsolateID as the stable isolate key']
+  hivdb_isolate_id int [note: 'Source tblIsolates.IsolateID; null for legacy imports']
   patient_id int [not null, note: 'PtID from HIVDB']
   gene gene_enum [not null, note: 'Gene']
-  isolate_date date [not null]
-  subtype varchar [not null]
-  source isolate_source_enum [not null]
+  isolate_date date [note: 'Exact collection date when available']
+  isolate_year int [note: 'Collection year from ART-naive workflow']
+  subtype varchar
+  source isolate_source_enum
   // clone_method isolate_clone_method_enum // looks like all clone_method's are None 
-  seq_method isolate_seq_method_enum [not null]
+  seq_method isolate_seq_method_enum
   country_code char(3) [
     ref: > Loc.country_code,
     not null,
@@ -262,30 +266,29 @@ Table isolates as Iso {
     note: 'Genbank accession number(s); comma delimited'
   ]
   cpr_excluded boolean [
-    not null,
-    note: 'The isolate is excluded by CPR if true'
+    note: 'False for calculated isolates; null for unprocessed legacy isolates'
   ]
-  date_entered date [not null]
+  date_entered date
 
   indexes {
     (dataset_name, isolate_name, gene) [pk]
-    (patient_id, gene, isolate_date) [unique]
+    (dataset_name, hivdb_isolate_id) [unique]
     genbank_accn
     country_code
     cpr_excluded
   }
 
-  Note: 'Table storing isolate metadata imported from HIVDB and CPR'
+  Note: 'Table storing selected isolate metadata from HIVDB'
 
 }
 
 Table isolate_mutations as IsoMut {
   dataset_name varchar
-  isolate_name varchar [note: 'Isolate name (PseudoName from HIVDB)']
+  isolate_name varchar [note: 'Selected HIVDB IsolateID for calculated rows']
   gene gene_enum [not null, note: 'Gene']
   mutation varchar [not null]
   position int [note: 'AA Position in gene']
-  amino_acid amino_acid_enum [note: 'Mutation amino acid']
+  amino_acid varchar [note: 'Mutation amino acid or insertion/deletion symbol']
   is_mixture boolean [note: 'If this position has mixtures']
 
   indexes {
@@ -295,7 +298,7 @@ Table isolate_mutations as IsoMut {
     amino_acid
   }
 
-  Note: 'Table storing isolate mutations imported from CPR'
+  Note: 'Table storing isolate mutations from the sequence calculation'
 }
 
 Ref: IsoMut.(dataset_name, isolate_name, gene) > Iso.(dataset_name, isolate_name, gene) 
@@ -306,7 +309,7 @@ Table isolate_excluded_surv_mutations as IsoExSDRMs {
   gene gene_enum [not null, note: 'Gene']
   mutation varchar [ref: > SDRM.mutation]
   position int [note: 'AA Position in gene']
-  amino_acid amino_acid_enum [note: 'Mutation amino acid']
+  amino_acid varchar [note: 'Mutation amino acid or insertion/deletion symbol']
 
   indexes {
     (dataset_name, isolate_name, gene, position, amino_acid) [pk]
@@ -373,7 +376,7 @@ Table dataset_summaries as DSum {
   isolate_year_begin int [not null, note: 'Isolate year range begin']
   isolate_year_end int [not null, note: 'Isolate year range end']
   isolate_sources varchar [not null, note: 'comma separated distinct isolate sources']
-  isolate_seq_methods varchar [not null, note: 'comma separated distinct sequence methods']
+  isolate_seq_methods varchar [note: 'comma separated distinct sequence methods, when known']
   isolate_country_codes varchar [not null, note: 'comma separated distinct country codes']
 
   num_isolates int [not null, note: 'Number of isolates']

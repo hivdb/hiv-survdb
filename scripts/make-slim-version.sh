@@ -5,8 +5,7 @@ DB_FILE=$1
 sqlite3 $DB_FILE <<EOF
 DELETE FROM articles AS ref WHERE NOT EXISTS (
   SELECT 1 FROM datasets ds WHERE
-    ref.ref_name = ds.ref_name AND
-    ds.status NOT IN ('EX', 'New')
+    ref.ref_name = ds.ref_name
 );
 DELETE FROM countries AS reg WHERE NOT EXISTS (
   SELECT 1 FROM isolates iso WHERE

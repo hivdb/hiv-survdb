@@ -83,7 +83,13 @@ def cli(
             try:
                 first = next(rows)
             except StopIteration:
-                pass
+                # sqlite-utils does not create a table when insert_all sees
+                # no rows. Keep empty PostgreSQL tables in the export so
+                # their indexes and the slim-version cleanup still work.
+                db[table].create(
+                    {column["name"]: str for column in inspector.get_columns(table)},
+                    pk=pks,
+                )
             else:
                 rows = itertools.chain([first], rows)
                 if progress:

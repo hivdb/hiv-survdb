@@ -372,8 +372,10 @@ Table dataset_patterns as DP {
 
 // SQLite exports also add dataset_patient_counts and dataset_patient_mutation_counts.
 // They aggregate distinct patient IDs from isolates and isolate_mutations for the
-// surveillance frontend; isolate_year = -1 means all collection years.
-// Both tables are generated after PostgreSQL export by scripts/add-patient-counts.py.
+// surveillance frontend. Counts for HIVdb-scored mutations are replaced with
+// distinct patient counts calculated from Sierra reports. The isolate_year value
+// -1 means all collection years. Both tables are added after PostgreSQL export
+// by scripts/add-patient-counts.py.
 
 Table dataset_summaries as DSum {
   dataset_name varchar [pk, ref: > D.dataset_name]

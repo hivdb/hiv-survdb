@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build SurvDB scored single-mutation options and patient counts."""
+"""Build HIVdb-scored mutation options and patient counts from Sierra reports."""
 
 import argparse
 import csv
@@ -7,7 +7,7 @@ import gzip
 import json
 import re
 import xml.etree.ElementTree as ET
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 
@@ -90,35 +90,9 @@ def selected_isolates(payload):
     return isolates
 
 
-def build_counts(payload, positions, hiv, art):
+def build_counts(payload, positions, reports):
     isolates = selected_isolates(payload)
-    seen = set()
     persons = defaultdict(set)
-    for gene, by_position in positions.items():
-        path = art / "step_output/14_split_gene_position_tables" / f"{gene}_position_table.csv"
-        with path.open(encoding="utf-8-sig", newline="") as source:
-            reader = csv.DictReader(source)
-            indexes = {
-                pos: f"P{pos}" for pos in by_position
-                if f"P{pos}" in reader.fieldnames
-            }
-            if len(indexes) != len(by_position):
-                raise ValueError(f"Missing positions in {path}")
-            for row in reader:
-                key = (row["RefID"], row["IsolateID"], gene)
-                selected = isolates.get(key)
-                if selected is None:
-                    continue
-                seen.add(key)
-                dataset, country, year, patient = selected
-                for pos, column in indexes.items():
-                    value = row[column]
-                    for aa, mutation in by_position[pos]:
-                        if value == aa or (len(value) > 1 and aa in value):
-                            persons[(dataset, country, -1, mutation)].add(patient)
-                            persons[(dataset, country, year, mutation)].add(patient)
-    print(f"Matched {len(seen):,}/{len(isolates):,} selected isolates")
-    missing = set(isolates) - seen
     ref_names = {
         row["ref_id"]: row["ref_name"]
         for row in read_csv(payload / "articles.csv")
@@ -127,16 +101,15 @@ def build_counts(payload, positions, hiv, art):
     for key, selected in isolates.items():
         ref_id, _, gene = key
         if gene in positions:
-            by_ref_patient_gene[(ref_id, selected[3], gene)].append(key)
-    ref_ids = {key[0] for key in isolates}
-    fallback_seen = set()
-    missing_reports = []
-    for ref_id in sorted(ref_ids):
+            by_ref_patient_gene[(ref_id, selected[3], gene)].append(selected)
+    seen = set()
+    report_count = 0
+    for ref_id in sorted({key[0] for key in by_ref_patient_gene}):
         stem = re.sub(r"\s+", "-", ref_names[ref_id].lower().replace("'", "").replace('"', ""))
-        path = hiv / "hiv-survdb/local/cpr-reports/sierra" / f"{stem}.json.gz"
-        if not path.exists():
-            missing_reports.append(ref_id)
-            continue
+        path = reports / f"{stem}.json.gz"
+        if not path.is_file():
+            raise FileNotFoundError(f"Missing Sierra report for RefID {ref_id}: {path}")
+        report_count += 1
         with gzip.open(path, "rt") as source:
             analyses = json.load(source)["result"]["sequenceAnalysis"]
         for analysis in analyses:
@@ -146,38 +119,33 @@ def build_counts(payload, positions, hiv, art):
             patient_id = matched.group(1)
             for gene_data in analysis["alignedGeneSequences"]:
                 gene = gene_data["gene"]["name"]
-                keys = by_ref_patient_gene.get((ref_id, patient_id, gene), ())
-                if not keys:
+                selected_key = (ref_id, patient_id, gene)
+                selected_rows = by_ref_patient_gene.get(selected_key, ())
+                if not selected_rows:
                     continue
-                for key in keys:
-                    is_missing = key in missing
-                    if is_missing:
-                        fallback_seen.add(key)
-                    dataset, country, year, patient = isolates[key]
-                    for item in gene_data["mutations"]:
-                        for aa, mutation in positions[gene].get(item["position"], ()):
-                            if not is_missing and aa not in ("ins", "del"):
-                                continue
-                            if len(aa) == 1:
-                                matched_aa = aa in item["AAs"]
-                            elif aa == "ins":
-                                matched_aa = item["isIndel"] and (
-                                    "ins" in item["shortText"].lower() or
-                                    item["AAs"] in ("_", "i")
-                                )
-                            else:
-                                matched_aa = item["isIndel"] and (
-                                    "del" in item["shortText"].lower() or
-                                    item["AAs"] in ("-", "d")
-                                )
-                            if matched_aa:
+                seen.add(selected_key)
+                for item in gene_data["mutations"]:
+                    for aa, mutation in positions[gene].get(item["position"], ()):
+                        if len(aa) == 1:
+                            matched_aa = aa in item["AAs"]
+                        elif aa == "ins":
+                            matched_aa = item["isIndel"] and (
+                                "ins" in item["shortText"].lower() or
+                                "_" in item["AAs"] or item["AAs"] == "i"
+                            )
+                        else:
+                            matched_aa = item["isIndel"] and (
+                                "del" in item["shortText"].lower() or
+                                item["AAs"] in ("-", "d")
+                            )
+                        if matched_aa:
+                            for dataset, country, year, patient in selected_rows:
                                 persons[(dataset, country, -1, mutation)].add(patient)
                                 persons[(dataset, country, year, mutation)].add(patient)
-    print(f"Matched {len(fallback_seen):,}/{len(missing):,} remaining isolates via Sierra")
-    print("Missing Sierra reports:", len(missing_reports), missing_reports[:10])
-    print("Still unmatched:", Counter(key[2] for key in missing - fallback_seen))
-    if any(key[2] in positions for key in missing - fallback_seen):
-        raise ValueError("Some selected PR/RT/IN isolates have no mutation source")
+    missing = set(by_ref_patient_gene) - seen
+    print(f"Matched {len(seen):,}/{len(by_ref_patient_gene):,} selected patient-gene groups in {report_count} Sierra reports")
+    if missing:
+        raise ValueError(f"No Sierra analysis for {len(missing)} selected patient-gene groups; first: {sorted(missing)[:10]}")
     return sorted((*key, len(ids)) for key, ids in persons.items())
 
 
@@ -191,20 +159,34 @@ def main():
         "--counts", type=Path,
         default=HIV / "hiv-survdb-payload/tables/dataset_patient_scored_mutation_counts.csv",
     )
+    parser.add_argument(
+        "--count-options", type=Path,
+        default=HIV / "hiv-survdb-payload/tables/scored_mutation_options.csv",
+    )
     parser.add_argument("--hiv-root", type=Path, default=HIV)
-    parser.add_argument("--art-root", type=Path)
     parser.add_argument("--payload", type=Path)
+    parser.add_argument("--reports", type=Path)
     args = parser.parse_args()
     hiv = args.hiv_root
-    art = args.art_root or hiv.parent / "HIVDB-Surv-project/ART-naive"
     payload = args.payload or hiv / "hiv-survdb-payload/tables"
+    reports = args.reports or hiv / "hiv-survdb/local/cpr-reports/sierra"
     version, options, positions = score_options(hiv)
     args.options.write_text(json.dumps({
         "algorithmVersion": version, "drugClasses": options
     }, indent=2) + "\n")
+    with args.count_options.open("w", encoding="utf-8-sig", newline="") as destination:
+        writer = csv.writer(destination, lineterminator="\n")
+        writer.writerow(("mutation",))
+        writer.writerows((mutation,) for mutation in sorted(set().union(*options.values())))
     print("Scored options:", {key: len(value) for key, value in options.items()})
     if args.counts:
-        counts = build_counts(payload, positions, hiv, art)
+        counts = build_counts(payload, positions, reports)
+        observed = {mutation for _, _, year, mutation, _ in counts if year == -1}
+        unmatched = {
+            drug_class: [mutation for mutation in mutations if mutation not in observed]
+            for drug_class, mutations in options.items()
+        }
+        print("Scored mutations with no selected publication:", unmatched)
         with args.counts.open("w", encoding="utf-8-sig", newline="") as destination:
             writer = csv.writer(destination, lineterminator="\n")
             writer.writerow(("dataset_name", "country_code", "isolate_year", "mutation", "num_persons"))

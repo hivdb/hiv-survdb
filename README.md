@@ -87,13 +87,13 @@ For the 2026-10-19 reflist, the finished database has **565 RefIDs, 610 datasets
 
 ## Table coverage
 
-The build includes all 21 tables in `schema.dbml`. The steps above refresh these payload inputs: `articles`, `datasets`, `journals`, `isolates`, `isolate_mutations`, and `surv_mutations`. They also regenerate `dataset_countries`, `patterns`, `pattern_genes`, `pattern_surv_mutations`, `dataset_patterns`, and all five `dataset_*_summaries` tables. `last_update` is set during the build. The SQLite export also derives `dataset_patient_counts` and `dataset_patient_mutation_counts` from the payload-sourced `isolates` and `isolate_mutations` rows. These count distinct patient IDs for the site and remain in the slim SQLite after individual isolate rows are removed; they are not separate payload CSV inputs.
+The build includes all 21 tables in `schema.dbml`. The steps above refresh these payload inputs: `articles`, `datasets`, `journals`, `isolates`, `isolate_mutations`, and `surv_mutations`. They also regenerate `dataset_countries`, `patterns`, `pattern_genes`, `pattern_surv_mutations`, `dataset_patterns`, and all five `dataset_*_summaries` tables. `last_update` is set during the build. The SQLite export derives `dataset_patient_counts` and initial `dataset_patient_mutation_counts` from the payload-sourced `isolates` and `isolate_mutations` rows. Before exporting SQLite, run `python3 scripts/build-scored-mutation-counts.py` to count the HIVdb-scored mutations from `local/cpr-reports/sierra/*.json.gz`. This writes `payload/tables/dataset_patient_scored_mutation_counts.csv` and `payload/tables/scored_mutation_options.csv`. The SQLite export replaces counts for all scored mutations with these Sierra counts, including scored mutations with no matches. The patient-level counts remain in the slim SQLite after individual isolate rows are removed.
 
 `countries`, `country_subregions`, and `drug_classes` are copied from the existing payload lookup CSVs; this workflow does **not** refresh their definitions from HIVDB. Review those CSVs separately when country mappings or drug classes change. `isolate_excluded_surv_mutations` is empty because this update uses the source project's amino-acid SDRM calculation and does not run CPR. Exact isolate dates, sequence methods, GenBank accessions, and entry dates are not supplied by that calculation output, so their optional isolate fields remain null.
 
 ## CPR reports and links
 
-The resistance calculation above does not need CPR. To add **current** CPR report links to `datasets.url`, use the selected `IsolateID` values in the payload; historical reports in `payload/suppl-tables/cpr_POL.txt` were built from a different selection. Do not attach those old URLs to these datasets.
+The HIVdb-scored mutation counts require the Sierra analyses cached during the CPR run below. Complete the FASTA export and Sierra/CPR submission before running `scripts/build-scored-mutation-counts.py` and rebuilding SQLite. Permanent CPR report links in `datasets.url` are a separate publication step. Use the selected `IsolateID` values in the payload; historical reports in `payload/suppl-tables/cpr_POL.txt` were built from a different selection. Do not attach those old URLs to these datasets.
 
 ### 1. Prepare and audit report inputs
 
@@ -113,6 +113,8 @@ Run the resumable batch client. It uses local Sierra at `127.0.0.1:8111`, the cu
 ```bash
 uv run --frozen python scripts/submit-cpr-reports.py --preview local/cpr-ref-report-links-preview.csv --fasta-dir local/cpr-fasta-ref
 ```
+
+For every reference, this command sends the POL FASTA sequences to Sierra, saves the full Sierra response in `local/cpr-reports/sierra/<ref-slug>.json.gz`, and submits the same result to CPR report storage. Once all Sierra caches are present, run `python3 scripts/build-scored-mutation-counts.py` and rebuild SQLite to include the scored mutation counts.
 
 The older `scripts/batch_cpr.sh` expects the unavailable `../hivdb-scripts/CPR/batch_cpr_docker` client and a different input path. Use the new client for this selection.
 

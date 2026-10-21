@@ -20,6 +20,11 @@ def main():
         default=Path(__file__).resolve().parents[1] /
         "payload/tables/dataset_patient_scored_mutation_counts.csv",
     )
+    parser.add_argument(
+        "--scored-options", type=Path,
+        default=Path(__file__).resolve().parents[1] /
+        "payload/tables/scored_mutation_options.csv",
+    )
     args = parser.parse_args()
     connection = sqlite3.connect(args.database)
     groups = defaultdict(lambda: defaultdict(new_patient))
@@ -110,15 +115,26 @@ def main():
             row["dataset_name"], row["country_code"],
             int(row["isolate_year"]), row["mutation"], int(row["num_persons"])
         ) for row in reader]
-    before = connection.total_changes
+    with args.scored_options.open(encoding="utf-8-sig", newline="") as source:
+        reader = csv.DictReader(source)
+        if reader.fieldnames != ["mutation"]:
+            raise ValueError(f"Unexpected scored-option columns: {args.scored_options}")
+        scored_options = [row["mutation"] for row in reader]
+    if not scored_options or len(scored_options) != len(set(scored_options)):
+        raise ValueError(f"Empty or duplicate scored options: {args.scored_options}")
+    if {row[3] for row in scored_rows} - set(scored_options):
+        raise ValueError("Scored counts contain mutations absent from scored options")
     connection.executemany(
-        "INSERT OR IGNORE INTO dataset_patient_mutation_counts VALUES (?,?,?,?,?)",
+        "DELETE FROM dataset_patient_mutation_counts WHERE mutation = ?",
+        ((mutation,) for mutation in scored_options),
+    )
+    connection.executemany(
+        "INSERT INTO dataset_patient_mutation_counts VALUES (?,?,?,?,?)",
         scored_rows,
     )
-    added_scored_rows = connection.total_changes - before
     connection.commit()
     print(f"Added {len(count_rows)} patient groups and {len(mutation_rows)} mutation groups")
-    print(f"Added {added_scored_rows} scored mutation groups")
+    print(f"Added {len(scored_rows)} Sierra scored mutation groups")
 
 
 if __name__ == "__main__":

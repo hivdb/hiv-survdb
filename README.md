@@ -87,7 +87,7 @@ For the 2026-10-19 reflist, the finished database has **565 RefIDs, 610 datasets
 
 ## Table coverage
 
-The build includes all 21 tables in `schema.dbml`. The steps above refresh these payload inputs: `articles`, `datasets`, `journals`, `isolates`, `isolate_mutations`, and `surv_mutations`. They also regenerate `dataset_countries`, `patterns`, `pattern_genes`, `pattern_surv_mutations`, `dataset_patterns`, and all five `dataset_*_summaries` tables. `last_update` is set during the build.
+The build includes all 21 tables in `schema.dbml`. The steps above refresh these payload inputs: `articles`, `datasets`, `journals`, `isolates`, `isolate_mutations`, and `surv_mutations`. They also regenerate `dataset_countries`, `patterns`, `pattern_genes`, `pattern_surv_mutations`, `dataset_patterns`, and all five `dataset_*_summaries` tables. `last_update` is set during the build. The SQLite export also derives `dataset_patient_counts` and `dataset_patient_mutation_counts` from the payload-sourced `isolates` and `isolate_mutations` rows. These count distinct patient IDs for the site and remain in the slim SQLite after individual isolate rows are removed; they are not separate payload CSV inputs.
 
 `countries`, `country_subregions`, and `drug_classes` are copied from the existing payload lookup CSVs; this workflow does **not** refresh their definitions from HIVDB. Review those CSVs separately when country mappings or drug classes change. `isolate_excluded_surv_mutations` is empty because this update uses the source project's amino-acid SDRM calculation and does not run CPR. Exact isolate dates, sequence methods, GenBank accessions, and entry dates are not supplied by that calculation output, so their optional isolate fields remain null.
 

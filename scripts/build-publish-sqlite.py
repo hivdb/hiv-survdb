@@ -122,21 +122,32 @@ def validate_database(path, expected_counts, scored_options, cpr_preview, starte
         if updated_at < started_at:
             raise ValueError(f"Stale last_update in {path}: {timestamp}")
         dataset_rows = dict(db.execute("SELECT dataset_name, url FROM datasets"))
-        if set(dataset_rows) != set(cpr_preview):
-            raise ValueError(f"CPR preview and SQLite datasets differ in {path}")
+        expected_datasets = {
+            name: row for name, row in cpr_preview.items()
+            if int(row["sequence_count"] or 0) > 0
+        }
+        if set(dataset_rows) != set(expected_datasets):
+            raise ValueError(f"Positive-person CPR datasets and SQLite differ in {path}")
         person_counts = dict(db.execute(
             "SELECT dataset_name, SUM(num_persons) FROM dataset_patient_counts "
             "WHERE isolate_year = -1 GROUP BY dataset_name"
         ))
-        for dataset, row in cpr_preview.items():
-            expected = int(row["sequence_count"] or 0)
-            if person_counts.get(dataset, 0) != expected:
+        if set(person_counts) != set(dataset_rows):
+            raise ValueError(f"Dataset person counts and SQLite datasets differ in {path}")
+        for dataset, row in expected_datasets.items():
+            expected = int(row["sequence_count"])
+            if person_counts[dataset] != expected:
                 raise ValueError(f"CPR person count mismatch for {dataset} in {path}")
             slug = row["fasta_file"].removesuffix("-seq.fas")
-            expected_url = (f"https://hivdb.stanford.edu/cpr/report/?load=hiv-survdb/{slug}"
-                            if expected else "")
+            expected_url = f"https://hivdb.stanford.edu/cpr/report/?load=hiv-survdb/{slug}"
             if (dataset_rows[dataset] or "") != expected_url:
                 raise ValueError(f"Incorrect dataset CPR URL for {dataset} in {path}")
+        orphan_articles, = db.execute("""
+            SELECT COUNT(*) FROM articles A
+            WHERE NOT EXISTS (SELECT 1 FROM datasets D WHERE D.ref_name = A.ref_name)
+        """).fetchone()
+        if orphan_articles:
+            raise ValueError(f"{orphan_articles} articles have no dataset in {path}")
         isolate_count, = db.execute("SELECT count(*) FROM isolates").fetchone()
         if (isolate_count == 0) != slim:
             raise ValueError(f"Unexpected isolate coverage in {path}: {isolate_count}")

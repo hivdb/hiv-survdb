@@ -13,6 +13,38 @@ def new_patient():
     return {"genes": set(), "classes": set(), "mutations": set()}
 
 
+def remove_zero_person_datasets(connection):
+    """Remove datasets with no PR, RT, or IN patients from the published DB."""
+    empty = [row[0] for row in connection.execute("""
+        SELECT D.dataset_name
+        FROM datasets D
+        LEFT JOIN dataset_patient_counts P ON
+          P.dataset_name = D.dataset_name AND P.isolate_year = -1
+        GROUP BY D.dataset_name
+        HAVING COALESCE(SUM(P.num_persons), 0) = 0
+    """)]
+    if not empty:
+        return []
+    tables = [row[0] for row in connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+    )]
+    for table in tables:
+        quoted = '"' + table.replace('"', '""') + '"'
+        columns = {row[1] for row in connection.execute(f"PRAGMA table_info({quoted})")}
+        if "dataset_name" in columns:
+            connection.executemany(
+                f"DELETE FROM {quoted} WHERE dataset_name = ?",
+                ((name,) for name in empty),
+            )
+    connection.execute("""
+        DELETE FROM articles
+        WHERE NOT EXISTS (
+            SELECT 1 FROM datasets D WHERE D.ref_name = articles.ref_name
+        )
+    """)
+    return empty
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("database")
@@ -133,6 +165,7 @@ def main():
         "INSERT INTO dataset_patient_mutation_counts VALUES (?,?,?,?,?)",
         scored_rows,
     )
+    removed = remove_zero_person_datasets(connection)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     updated = connection.execute(
         "UPDATE last_update SET last_update = ? WHERE scope = ?",
@@ -143,6 +176,7 @@ def main():
     connection.commit()
     print(f"Added {len(count_rows)} patient groups and {len(mutation_rows)} mutation groups")
     print(f"Added {len(scored_rows)} Sierra scored mutation groups")
+    print(f"Removed {len(removed)} zero-person datasets: {', '.join(removed) or 'none'}")
 
 
 if __name__ == "__main__":

@@ -13,11 +13,11 @@ python3 scripts/build-publish-sqlite.py
 The command runs these stages in order:
 
 1. Read the selected isolates in `payload/tables/isolates.d/` and export their POL nucleotide sequences from the local read-only HIVDB2 copy into dataset FASTA files.
-2. Combine dataset FASTA files into one file per publication (`ref_name`). Run those sequences through local Sierra, save each complete `local/cpr-reports/sierra/<ref-slug>.json.gz` response, and submit the corresponding CPR reports.
-3. Publish permanent CPR report assets and apply their URLs to `payload/tables/datasets.csv`.
+2. Combine dataset FASTA files into one file per publication (`ref_name`). Run those sequences through local Sierra and save each complete `local/cpr-reports/sierra/<ref-slug>.json.gz` response for scored mutation counts.
+3. Submit a separate CPR report for every POL dataset, publish its permanent assets, and apply its unique URL to `payload/tables/datasets.csv`. A publication split across continents therefore has one report per continent. CA-only datasets without POL sequences have no POL CPR link.
 4. Read the latest HIVdb algorithm and the Sierra responses to regenerate `dataset_patient_scored_mutation_counts.csv`, `scored_mutation_options.csv`, and the frontend scored mutation options.
 5. Import the payload CSVs into PostgreSQL, export full and slim SQLite files, and calculate the distinct-patient counts. `scripts/add-patient-counts.py` sets `last_update` **after** writing the Sierra counts. Both SQLite files therefore carry the final build timestamp.
-6. Check SQLite integrity, all dataset CPR URLs, the full versus slim isolate coverage, the exact scored count rows against the CSV, and the matching `last_update` values.
+6. Check SQLite integrity, each CPR FASTA sequence count against its dataset person count, each dataset CPR URL, the full versus slim isolate coverage, the exact scored count rows against the CSV, and the matching `last_update` values.
 7. Require committed builder and payload source, push their `main` branches, gzip and upload both versioned SQLite files to S3, and tag the payload commit with the UTC version. Build and commit the CMS version change, upload the four CMS page JSON files, and invalidate their CloudFront cache.
 
 The release version defaults to `YYYYMMDD-HHMMSS` in UTC. The script refuses to overwrite local or published files with the same version.

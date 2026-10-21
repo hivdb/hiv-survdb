@@ -5,6 +5,7 @@ import argparse
 import csv
 import sqlite3
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -132,6 +133,13 @@ def main():
         "INSERT INTO dataset_patient_mutation_counts VALUES (?,?,?,?,?)",
         scored_rows,
     )
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    updated = connection.execute(
+        "UPDATE last_update SET last_update = ? WHERE scope = ?",
+        (timestamp, "global"),
+    )
+    if updated.rowcount != 1:
+        raise ValueError("Expected one global last_update row")
     connection.commit()
     print(f"Added {len(count_rows)} patient groups and {len(mutation_rows)} mutation groups")
     print(f"Added {len(scored_rows)} Sierra scored mutation groups")

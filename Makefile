@@ -137,7 +137,7 @@ payload/sequences: scripts/export-sequences-from-hivdb.sh docker-envfile .ssh-de
 
 devdb: update-builder network
 	@docker run \
-		--rm -it \
+		--rm \
 		--volume=$(shell pwd):/hiv-survdb/ \
 		--volume=$(shell dirname $$(pwd))/hiv-survdb-payload:/hiv-survdb-payload \
 		${BUILDER_IMAGE} \

@@ -2,8 +2,10 @@
 """Add patient-level aggregate counts to a full SurvDB SQLite database."""
 
 import argparse
+import csv
 import sqlite3
 from collections import defaultdict
+from pathlib import Path
 
 
 def new_patient():
@@ -13,6 +15,11 @@ def new_patient():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("database")
+    parser.add_argument(
+        "--scored-counts", type=Path,
+        default=Path(__file__).resolve().parents[1] /
+        "payload/tables/dataset_patient_scored_mutation_counts.csv",
+    )
     args = parser.parse_args()
     connection = sqlite3.connect(args.database)
     groups = defaultdict(lambda: defaultdict(new_patient))
@@ -93,8 +100,25 @@ def main():
         "INSERT INTO dataset_patient_mutation_counts VALUES (?,?,?,?,?)",
         mutation_rows,
     )
+    with args.scored_counts.open(encoding="utf-8-sig", newline="") as source:
+        reader = csv.DictReader(source)
+        if reader.fieldnames != [
+            "dataset_name", "country_code", "isolate_year", "mutation", "num_persons"
+        ]:
+            raise ValueError(f"Unexpected scored-count columns: {args.scored_counts}")
+        scored_rows = [(
+            row["dataset_name"], row["country_code"],
+            int(row["isolate_year"]), row["mutation"], int(row["num_persons"])
+        ) for row in reader]
+    before = connection.total_changes
+    connection.executemany(
+        "INSERT OR IGNORE INTO dataset_patient_mutation_counts VALUES (?,?,?,?,?)",
+        scored_rows,
+    )
+    added_scored_rows = connection.total_changes - before
     connection.commit()
     print(f"Added {len(count_rows)} patient groups and {len(mutation_rows)} mutation groups")
+    print(f"Added {added_scored_rows} scored mutation groups")
 
 
 if __name__ == "__main__":

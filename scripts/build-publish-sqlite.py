@@ -63,13 +63,7 @@ def refresh_cpr():
     run(sys.executable, "scripts/publish-cpr-report-links.py",
         "--preview", "local/cpr-ref-report-links-preview.csv",
         "--fasta-dir", "local/cpr-fasta-ref")
-    run("uv", "run", "--frozen", "python", "scripts/submit-cpr-reports.py",
-        "--preview", "local/cpr-report-links-preview.csv",
-        "--fasta-dir", "local/cpr-fasta-current")
-    run(sys.executable, "scripts/publish-cpr-report-links.py",
-        "--preview", "local/cpr-report-links-preview.csv",
-        "--fasta-dir", "local/cpr-fasta-current")
-    run(sys.executable, "scripts/apply-cpr-dataset-links.py", "--apply")
+    run(sys.executable, "scripts/apply-cpr-ref-links.py", "--apply")
 
 
 def build_scored_counts():
@@ -111,7 +105,8 @@ def build_sqlite(version):
     return full, slim
 
 
-def validate_database(path, expected_counts, scored_options, cpr_preview, started_at, slim):
+def validate_database(path, expected_counts, scored_options, cpr_preview,
+                      ref_preview, started_at, slim):
     with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError(f"SQLite integrity check failed: {path}")
@@ -121,7 +116,11 @@ def validate_database(path, expected_counts, scored_options, cpr_preview, starte
         updated_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         if updated_at < started_at:
             raise ValueError(f"Stale last_update in {path}: {timestamp}")
-        dataset_rows = dict(db.execute("SELECT dataset_name, url FROM datasets"))
+        dataset_rows = {
+            dataset: (ref, url) for dataset, ref, url in db.execute(
+                "SELECT dataset_name, ref_name, url FROM datasets"
+            )
+        }
         expected_datasets = {
             name: row for name, row in cpr_preview.items()
             if int(row["sequence_count"] or 0) > 0
@@ -138,10 +137,18 @@ def validate_database(path, expected_counts, scored_options, cpr_preview, starte
             expected = int(row["sequence_count"])
             if person_counts[dataset] != expected:
                 raise ValueError(f"CPR person count mismatch for {dataset} in {path}")
-            slug = row["fasta_file"].removesuffix("-seq.fas")
+            ref, actual_url = dataset_rows[dataset]
+            if ref not in ref_preview:
+                raise ValueError(f"Missing reference CPR input for {dataset}: {ref}")
+            slug = ref_preview[ref]["fasta_file"].removesuffix("-seq.fas")
             expected_url = f"https://hivdb.stanford.edu/cpr/report/?load=hiv-survdb/{slug}"
-            if (dataset_rows[dataset] or "") != expected_url:
+            if (actual_url or "") != expected_url:
                 raise ValueError(f"Incorrect dataset CPR URL for {dataset} in {path}")
+        ref_urls = {}
+        for ref, url in dataset_rows.values():
+            if ref in ref_urls and ref_urls[ref] != url:
+                raise ValueError(f"Reference has multiple CPR URLs in {path}: {ref}")
+            ref_urls[ref] = url
         orphan_articles, = db.execute("""
             SELECT COUNT(*) FROM articles A
             WHERE NOT EXISTS (SELECT 1 FROM datasets D WHERE D.ref_name = A.ref_name)
@@ -165,8 +172,7 @@ def validate_database(path, expected_counts, scored_options, cpr_preview, starte
                 f"Scored count mismatch in {path}: {len(actual)} SQLite rows, "
                 f"{len(expected_counts)} CSV rows"
             )
-        print(f"Validated {path.name}: {sum(bool(url) for url in dataset_rows.values())} "
-              "dataset CPR links, "
+        print(f"Validated {path.name}: {len(ref_urls)} reference CPR links, "
               f"{len(actual)} scored counts, last_update={timestamp}", flush=True)
         return timestamp
 
@@ -176,6 +182,10 @@ def validate_sqlite(full, slim, started_at):
         encoding="utf-8-sig", newline=""
     ) as handle:
         cpr_preview = {row["dataset_name"]: row for row in csv.DictReader(handle)}
+    with (ROOT / "local/cpr-ref-report-links-preview.csv").open(
+        encoding="utf-8-sig", newline=""
+    ) as handle:
+        ref_preview = {row["dataset_name"]: row for row in csv.DictReader(handle)}
     with (PAYLOAD / "tables/scored_mutation_options.csv").open(
         encoding="utf-8-sig", newline=""
     ) as handle:
@@ -190,8 +200,10 @@ def validate_sqlite(full, slim, started_at):
              int(row["isolate_year"]), row["mutation"]): int(row["num_persons"])
             for row in csv.DictReader(handle)
         }
-    full_timestamp = validate_database(full, counts, options, cpr_preview, started_at, False)
-    slim_timestamp = validate_database(slim, counts, options, cpr_preview, started_at, True)
+    full_timestamp = validate_database(
+        full, counts, options, cpr_preview, ref_preview, started_at, False)
+    slim_timestamp = validate_database(
+        slim, counts, options, cpr_preview, ref_preview, started_at, True)
     if full_timestamp != slim_timestamp:
         raise ValueError("Full and slim SQLite last_update values differ")
 

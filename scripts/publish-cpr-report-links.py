@@ -88,10 +88,10 @@ def publish_one(index, total, row, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preview", type=Path, default=Path("local/cpr-report-links-preview.csv"))
-    parser.add_argument("--fasta-dir", type=Path, default=Path("local/cpr-fasta-current"))
+    parser.add_argument("--preview", type=Path, default=Path("local/cpr-ref-report-links-preview.csv"))
+    parser.add_argument("--fasta-dir", type=Path, default=Path("local/cpr-fasta-ref"))
     parser.add_argument("--output-dir", type=Path, default=Path("local/cpr-reports"))
-    parser.add_argument("--dataset", help="publish one exact preview name (ref_name for the current workflow)")
+    parser.add_argument("--dataset", help="publish one ref_name from the preview")
     parser.add_argument("--available", action="store_true",
                         help="publish only reports with saved receipts so far")
     parser.add_argument("--workers", type=int, default=4,
